@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { WORDS_DATA, SENTENCES_DATA } from "@shared/types";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 
 export default function TranslatePage() {
   const [, setLocation] = useLocation();
@@ -17,6 +19,7 @@ export default function TranslatePage() {
   const [speechRate, setSpeechRate] = useState<"0.8" | "0.95" | "1.1">("0.95");
   const { toast } = useToast();
   const { speak, isSupported: isSpeechSupported, cancel, speakByPhrases } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
 
   const numericRate = useMemo(() => Number(speechRate), [speechRate]);
 
@@ -80,6 +83,17 @@ export default function TranslatePage() {
     }
     speakByPhrases(text, { lang, rate: numericRate });
   };
+
+  function JapaneseAssistText({ text }: { text: string }) {
+    const reading = useJapaneseReading(text, learnerMode === "id");
+    if (learnerMode !== "id") return <>{text}</>;
+    return (
+      <span className="inline-flex flex-col gap-1">
+        <span>{reading.kana}</span>
+        <span className="text-xs text-muted-foreground">（{reading.original}）</span>
+      </span>
+    );
+  }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -191,7 +205,7 @@ export default function TranslatePage() {
                       <div>
                         <p className="text-xs text-muted-foreground mb-1">日本語</p>
                         <p className="text-base" data-testid={`text-japanese-${result.id}`}>
-                          {result.japanese}
+                          <JapaneseAssistText text={result.japanese} />
                         </p>
                       </div>
                       

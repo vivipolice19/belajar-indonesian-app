@@ -7,6 +7,8 @@ import { SENTENCES_DATA } from "@shared/types";
 import { useGameProgress } from "@/hooks/useGameProgress";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 
 export default function SentencesPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -14,7 +16,9 @@ export default function SentencesPage() {
   const [shuffledSentences, setShuffledSentences] = useState([...SENTENCES_DATA]);
   const { progress, markSentenceLearned, markSentencePronounced } = useGameProgress();
   const { toast } = useToast();
-  const { speakIndonesian, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
+  const { speakIndonesian, speakJapanese, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const jpReading = useJapaneseReading(currentSentence?.japanese || "", learnerMode === "id");
 
   useEffect(() => {
     setShuffledSentences([...SENTENCES_DATA].sort(() => Math.random() - 0.5));
@@ -44,7 +48,11 @@ export default function SentencesPage() {
       return;
     }
     
-    speakIndonesian(currentSentence.indonesian);
+    if (learnerMode === "ja") {
+      speakIndonesian(currentSentence.indonesian);
+    } else {
+      speakJapanese(currentSentence.japanese);
+    }
     
     if (!progress.sentencesPronounced.includes(currentSentence.id)) {
       markSentencePronounced(currentSentence.id);
@@ -112,29 +120,44 @@ export default function SentencesPage() {
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    インドネシア語の文章
+                    {learnerMode === "ja" ? "インドネシア語の文章" : "日本語の文章"}
                   </p>
-                  <p className="text-2xl font-bold text-foreground leading-relaxed" data-testid="text-indonesian-sentence">
-                    {currentSentence.indonesian}
+                  <p
+                    className="text-2xl font-bold text-foreground leading-relaxed"
+                    data-testid={learnerMode === "ja" ? "text-indonesian-sentence" : "text-japanese-sentence"}
+                  >
+                    {learnerMode === "ja" ? currentSentence.indonesian : jpReading.kana}
                   </p>
+                  {learnerMode === "id" && (
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      （{jpReading.original}）
+                    </p>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
-                  カードをタップして日本語訳を表示
+                  {learnerMode === "ja"
+                    ? "カードをタップして日本語訳を表示"
+                    : "カードをタップしてインドネシア語訳を表示"}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    日本語訳
+                    {learnerMode === "ja" ? "日本語訳" : "インドネシア語訳"}
                   </p>
-                  <p className="text-2xl font-bold text-primary leading-relaxed" data-testid="text-japanese-sentence">
-                    {currentSentence.japanese}
+                  <p
+                    className="text-2xl font-bold text-primary leading-relaxed"
+                    data-testid={learnerMode === "ja" ? "text-japanese-sentence" : "text-indonesian-sentence"}
+                  >
+                    {learnerMode === "ja" ? currentSentence.japanese : currentSentence.indonesian}
                   </p>
                 </div>
                 <div className="text-center space-y-1">
                   <p className="text-base text-muted-foreground">
-                    {currentSentence.indonesian}
+                    {learnerMode === "ja"
+                      ? currentSentence.indonesian
+                      : `${jpReading.kana}（${jpReading.original}）`}
                   </p>
                   {currentSentence.category && (
                     <p className="text-xs text-muted-foreground">

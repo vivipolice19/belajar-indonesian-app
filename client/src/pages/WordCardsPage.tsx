@@ -7,6 +7,8 @@ import { WORDS_DATA } from "@shared/types";
 import { useGameProgress } from "@/hooks/useGameProgress";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 
 export default function WordCardsPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -14,7 +16,9 @@ export default function WordCardsPage() {
   const [shuffledWords, setShuffledWords] = useState([...WORDS_DATA]);
   const { progress, markWordLearned, markWordPronounced } = useGameProgress();
   const { toast } = useToast();
-  const { speakIndonesian, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
+  const { speakIndonesian, speakJapanese, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const jpReading = useJapaneseReading(currentWord?.japanese || "", learnerMode === "id");
 
   useEffect(() => {
     setShuffledWords([...WORDS_DATA].sort(() => Math.random() - 0.5));
@@ -44,7 +48,11 @@ export default function WordCardsPage() {
       return;
     }
     
-    speakIndonesian(currentWord.indonesian);
+    if (learnerMode === "ja") {
+      speakIndonesian(currentWord.indonesian);
+    } else {
+      speakJapanese(currentWord.japanese);
+    }
     
     if (!progress.wordsPronounced.includes(currentWord.id)) {
       markWordPronounced(currentWord.id);
@@ -112,29 +120,42 @@ export default function WordCardsPage() {
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    インドネシア語
+                    {learnerMode === "ja" ? "インドネシア語" : "日本語"}
                   </p>
-                  <p className="text-4xl font-bold text-foreground" data-testid="text-indonesian">
-                    {currentWord.indonesian}
+                  <p
+                    className="text-4xl font-bold text-foreground"
+                    data-testid={learnerMode === "ja" ? "text-indonesian" : "text-japanese"}
+                  >
+                    {learnerMode === "ja" ? currentWord.indonesian : jpReading.kana}
                   </p>
+                  {learnerMode === "id" && (
+                    <p className="text-sm text-muted-foreground">
+                      （{jpReading.original}）
+                    </p>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
-                  カードをタップして日本語の意味を表示
+                  {learnerMode === "ja"
+                    ? "カードをタップして日本語の意味を表示"
+                    : "カードをタップしてインドネシア語を表示"}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    日本語の意味
+                    {learnerMode === "ja" ? "日本語の意味" : "インドネシア語"}
                   </p>
-                  <p className="text-3xl font-bold text-primary" data-testid="text-japanese">
-                    {currentWord.japanese}
+                  <p
+                    className="text-3xl font-bold text-primary"
+                    data-testid={learnerMode === "ja" ? "text-japanese" : "text-indonesian"}
+                  >
+                    {learnerMode === "ja" ? currentWord.japanese : currentWord.indonesian}
                   </p>
                 </div>
                 <div className="text-center space-y-1">
                   <p className="text-lg text-muted-foreground">
-                    {currentWord.indonesian}
+                    {learnerMode === "ja" ? currentWord.indonesian : `${jpReading.kana}（${jpReading.original}）`}
                   </p>
                   {currentWord.category && (
                     <p className="text-xs text-muted-foreground">

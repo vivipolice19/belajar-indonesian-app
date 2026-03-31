@@ -8,6 +8,7 @@ import {
   generateSentences,
   advancedTranslate,
   testGeminiConnection,
+  generateJapaneseReading,
 } from "./lib/gemini";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -98,6 +99,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.status(500).json({ error: "翻訳に失敗しました。もう一度お試しください。" });
+    }
+  });
+
+  // Japanese reading helper (hiragana + original)
+  app.post("/api/japanese/reading", async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text || typeof text !== "string") {
+        return res.status(400).json({ error: "text is required" });
+      }
+      const result = await generateJapaneseReading(text);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Japanese reading error:", error);
+      const errorMsg = error?.message || "Failed to generate japanese reading";
+      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+        return res.status(429).json({ error: "本日のAI生成回数上限に達しました。明日また試してください。" });
+      }
+      res.status(500).json({ error: "読み仮名の生成に失敗しました。" });
     }
   });
 

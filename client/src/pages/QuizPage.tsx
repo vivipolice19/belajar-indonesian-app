@@ -8,6 +8,8 @@ import { useGameProgress } from "@/hooks/useGameProgress";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { cn } from "@/lib/utils";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 
 type QuizMode = "words" | "sentences";
 type Question = QuizQuestion | SentenceQuizQuestion;
@@ -148,17 +150,114 @@ function generateSingleSentenceQuestion(): SentenceQuizQuestion | null {
   };
 }
 
+type DirectionalQuestion = {
+  prompt: string;
+  options: string[];
+  correctAnswer: string;
+  speakLang: "id-ID" | "ja-JP";
+};
+
+function generateDirectionalWordQuestion(direction: "ja" | "id"): DirectionalQuestion {
+  const recent = getRecentQuestions("words");
+  let availableWords = WORDS_DATA.filter((w) => !recent.includes(w.id));
+  if (availableWords.length < 4) {
+    availableWords = WORDS_DATA;
+  }
+  const word = availableWords[Math.floor(Math.random() * availableWords.length)];
+  addRecentQuestion("words", word.id);
+
+  if (direction === "ja") {
+    const otherWords = WORDS_DATA.filter((w) => w.id !== word.id);
+    const wrongAnswers = otherWords
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3)
+      .map((w) => w.japanese);
+    const options = [...wrongAnswers, word.japanese].sort(() => Math.random() - 0.5);
+    return {
+      prompt: word.indonesian,
+      options,
+      correctAnswer: word.japanese,
+      speakLang: "id-ID",
+    };
+  }
+
+  const otherWords = WORDS_DATA.filter((w) => w.id !== word.id);
+  const wrongAnswers = otherWords
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3)
+    .map((w) => w.indonesian);
+  const options = [...wrongAnswers, word.indonesian].sort(() => Math.random() - 0.5);
+  return {
+    prompt: word.japanese,
+    options,
+    correctAnswer: word.indonesian,
+    speakLang: "ja-JP",
+  };
+}
+
+function generateDirectionalSentenceQuestion(direction: "ja" | "id"): DirectionalQuestion | null {
+  if (SENTENCES_DATA.length < 4) return null;
+  const recent = getRecentQuestions("sentences");
+  let availableSentences = SENTENCES_DATA.filter((s) => !recent.includes(s.id));
+  if (availableSentences.length < 4) {
+    availableSentences = SENTENCES_DATA;
+  }
+  const sentence = availableSentences[Math.floor(Math.random() * availableSentences.length)];
+  addRecentQuestion("sentences", sentence.id);
+
+  if (direction === "ja") {
+    const otherSentences = SENTENCES_DATA.filter((s) => s.id !== sentence.id);
+    const wrongAnswers = otherSentences
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3)
+      .map((s) => s.japanese);
+    const options = [...wrongAnswers, sentence.japanese].sort(() => Math.random() - 0.5);
+    return {
+      prompt: sentence.indonesian,
+      options,
+      correctAnswer: sentence.japanese,
+      speakLang: "id-ID",
+    };
+  }
+
+  const otherSentences = SENTENCES_DATA.filter((s) => s.id !== sentence.id);
+  const wrongAnswers = otherSentences
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3)
+    .map((s) => s.indonesian);
+  const options = [...wrongAnswers, sentence.indonesian].sort(() => Math.random() - 0.5);
+  return {
+    prompt: sentence.japanese,
+    options,
+    correctAnswer: sentence.indonesian,
+    speakLang: "ja-JP",
+  };
+}
+
+function JapaneseAssistText({ text, enabled }: { text: string; enabled: boolean }) {
+  const reading = useJapaneseReading(text, enabled);
+  if (!enabled) return <>{text}</>;
+  return (
+    <span className="inline-flex flex-col items-center gap-1">
+      <span>{reading.kana}</span>
+      <span className="text-sm text-muted-foreground">（{reading.original}）</span>
+    </span>
+  );
+}
+
 export default function QuizPage() {
   const [mode, setMode] = useState<QuizMode | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const [directionalQuestion, setDirectionalQuestion] = useState<DirectionalQuestion | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [questionCount, setQuestionCount] = useState(0);
   const { completeQuiz } = useGameProgress();
   const { toast } = useToast();
-  const { speakIndonesian, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
+  const { speak, isSupported: isSpeechSupported } = useSpeechSynthesis();
 
-  const pronounceWord = (text: string) => {
+  const pronounceWord = (text: string, lang: "id-ID" | "ja-JP") => {
     if (!isSpeechSupported) {
       toast({
         description: "お使いのブラウザは音声機能に対応していません",
@@ -167,12 +266,13 @@ export default function QuizPage() {
       return;
     }
     
-    speakIndonesian(text);
+    speak(text, lang, lang === "ja-JP" ? 0.95 : 0.85);
   };
 
   const startWordQuiz = () => {
     setMode("words");
     setCurrentQuestion(generateSingleWordQuestion());
+    setDirectionalQuestion(generateDirectionalWordQuestion(learnerMode));
     setSelectedAnswer(null);
     setScore(0);
     setQuestionCount(0);
@@ -189,6 +289,7 @@ export default function QuizPage() {
     }
     setMode("sentences");
     setCurrentQuestion(question);
+    setDirectionalQuestion(generateDirectionalSentenceQuestion(learnerMode));
     setSelectedAnswer(null);
     setScore(0);
     setQuestionCount(0);
@@ -197,6 +298,7 @@ export default function QuizPage() {
   const loadNextQuestion = () => {
     if (mode === "words") {
       setCurrentQuestion(generateSingleWordQuestion());
+      setDirectionalQuestion(generateDirectionalWordQuestion(learnerMode));
       setSelectedAnswer(null);
       setQuestionCount(prev => prev + 1);
     } else if (mode === "sentences") {
@@ -212,16 +314,17 @@ export default function QuizPage() {
         return;
       }
       setCurrentQuestion(question);
+      setDirectionalQuestion(generateDirectionalSentenceQuestion(learnerMode));
       setSelectedAnswer(null);
       setQuestionCount(prev => prev + 1);
     }
   };
 
   const handleAnswerSelect = (answer: string) => {
-    if (selectedAnswer || !currentQuestion) return;
+    if (selectedAnswer || !directionalQuestion) return;
 
     setSelectedAnswer(answer);
-    const isCorrect = answer === currentQuestion.correctAnswer;
+    const isCorrect = answer === directionalQuestion.correctAnswer;
 
     if (isCorrect) {
       playCorrectSound();
@@ -248,6 +351,7 @@ export default function QuizPage() {
   const handleBackToMenu = () => {
     setMode(null);
     setCurrentQuestion(null);
+    setDirectionalQuestion(null);
     setSelectedAnswer(null);
     setScore(0);
     setQuestionCount(0);
@@ -316,8 +420,24 @@ export default function QuizPage() {
     );
   }
 
-  const questionText = 'word' in currentQuestion ? currentQuestion.word.indonesian : currentQuestion.sentence.indonesian;
-  const questionLabel = mode === "words" ? "この単語の意味は？" : "この文章の意味は？";
+  if (!directionalQuestion) {
+    return (
+      <div className="p-4 flex items-center justify-center min-h-[50vh]">
+        <p className="text-muted-foreground">クイズを準備中...</p>
+      </div>
+    );
+  }
+
+  const questionText = directionalQuestion.prompt;
+  const isJapanesePrompt = learnerMode === "id" && directionalQuestion.speakLang === "ja-JP";
+  const questionLabel =
+    mode === "words"
+      ? learnerMode === "ja"
+        ? "この単語の意味は？"
+        : "この日本語の意味は？"
+      : learnerMode === "ja"
+        ? "この文章の意味は？"
+        : "この日本語の意味は？";
 
   return (
     <div className="p-4 space-y-6" data-testid="page-quiz">
@@ -350,13 +470,13 @@ export default function QuizPage() {
               "font-bold text-foreground text-center",
               mode === "words" ? "text-3xl" : "text-2xl leading-relaxed"
             )} data-testid="text-quiz-question">
-              {questionText}
+              <JapaneseAssistText text={questionText} enabled={isJapanesePrompt} />
             </p>
           </div>
           
           <div className="flex justify-center pt-2">
             <Button
-              onClick={() => pronounceWord(questionText)}
+              onClick={() => pronounceWord(questionText, directionalQuestion.speakLang)}
               disabled={!isSpeechSupported}
               size="lg"
               className="gap-3 h-14 px-8 text-lg font-bold bg-accent hover:bg-accent/90 text-accent-foreground shadow-lg"
@@ -370,9 +490,9 @@ export default function QuizPage() {
       </Card>
 
       <div className="space-y-3">
-        {currentQuestion.options.map((option, index) => {
+        {directionalQuestion.options.map((option, index) => {
           const isSelected = selectedAnswer === option;
-          const isCorrect = option === currentQuestion.correctAnswer;
+          const isCorrect = option === directionalQuestion.correctAnswer;
           const showResult = selectedAnswer !== null;
 
           return (
@@ -389,7 +509,12 @@ export default function QuizPage() {
               disabled={selectedAnswer !== null}
               data-testid={`button-answer-${index}`}
             >
-              <span className="flex-1 text-left">{option}</span>
+              <span className="flex-1 text-left">
+                <JapaneseAssistText
+                  text={option}
+                  enabled={learnerMode === "id" && directionalQuestion.speakLang === "id-ID"}
+                />
+              </span>
               {showResult && isCorrect && (
                 <CheckCircle2 className="w-5 h-5 text-success ml-2" />
               )}

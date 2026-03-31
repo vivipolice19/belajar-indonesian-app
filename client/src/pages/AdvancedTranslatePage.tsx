@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 
 interface TranslationResult {
   indonesian: string;
@@ -31,6 +33,7 @@ export default function AdvancedTranslatePage() {
   const [speechRate, setSpeechRate] = useState<"0.8" | "0.95" | "1.1">("0.95");
   const { toast } = useToast();
   const { speak, isSupported: isSpeechSupported, cancel, speakByPhrases } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
 
   const numericRate = useMemo(() => Number(speechRate), [speechRate]);
 
@@ -99,6 +102,17 @@ export default function AdvancedTranslatePage() {
     }
     speakByPhrases(text, { lang, rate: numericRate });
   };
+
+  function JapaneseAssistText({ text }: { text: string }) {
+    const reading = useJapaneseReading(text, learnerMode === "id");
+    if (learnerMode !== "id") return <>{text}</>;
+    return (
+      <span className="inline-flex flex-col gap-1">
+        <span>{reading.kana}</span>
+        <span className="text-sm text-muted-foreground">（{reading.original}）</span>
+      </span>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 pb-4 max-w-3xl">
@@ -262,7 +276,7 @@ export default function AdvancedTranslatePage() {
                   </div>
                 </div>
                 <p className="text-xl font-semibold text-primary" data-testid="text-japanese">
-                  {result.japanese}
+                  <JapaneseAssistText text={result.japanese} />
                 </p>
               </div>
 
@@ -328,7 +342,9 @@ export default function AdvancedTranslatePage() {
                       </div>
                     </div>
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm text-muted-foreground">{example.japanese}</p>
+                      <p className="text-sm text-muted-foreground">
+                        <JapaneseAssistText text={example.japanese} />
+                      </p>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button
                           size="icon"

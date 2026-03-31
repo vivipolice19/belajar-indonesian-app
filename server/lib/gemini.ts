@@ -169,6 +169,11 @@ interface TranslationResult {
   formality_level: string;
 }
 
+interface JapaneseReadingResult {
+  original: string;
+  hiragana: string;
+}
+
 export async function advancedTranslate(
   text: string,
   sourceLanguage: "japanese" | "indonesian"
@@ -213,6 +218,32 @@ Return a JSON object with this structure:
 }`;
     return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
   }
+}
+
+export async function generateJapaneseReading(text: string): Promise<JapaneseReadingResult> {
+  const systemPrompt = `You are an assistant that converts Japanese text to hiragana for language learners.
+Return valid JSON only.`;
+
+  const userPrompt = `Convert this Japanese text to easy-to-read hiragana while preserving punctuation:
+"${text}"
+
+Rules:
+- Output full hiragana sentence/phrase in "hiragana"
+- Keep punctuation marks such as 。、！？ and symbols
+- Do not include katakana unless required for proper nouns
+- Keep spacing natural for learners
+
+Return JSON:
+{
+  "original": "${text}",
+  "hiragana": "..."
+}`;
+
+  const result = await generateJSON<JapaneseReadingResult>(userPrompt, systemPrompt);
+  return {
+    original: result.original || text,
+    hiragana: result.hiragana || text,
+  };
 }
 
 export async function testGeminiConnection(): Promise<{ success: boolean; error?: string }> {
