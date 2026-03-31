@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: belajar-indonesian-app
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PORT
+        value: "5000"
+      # AI機能を使う場合のみ設定（RenderのDashboardで値を入れてください）
+      # - key: GEMINI_API_KEY
+      #   sync: false
+
