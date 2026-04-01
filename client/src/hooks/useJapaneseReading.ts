@@ -5,6 +5,7 @@ import {
   READING_CACHE_EVENT,
   readCache,
 } from "@/lib/japaneseReadingCache";
+import { getLocalJapaneseReading } from "@/lib/localJapaneseReading";
 
 function toHiraganaLoose(text: string): string {
   return text.replace(/[\u30a1-\u30f6]/g, (ch) =>
@@ -44,24 +45,43 @@ export function useJapaneseReading(text: string, enabled: boolean) {
 
     let cancelled = false;
     setLoading(true);
-    apiRequest("POST", "/api/japanese/reading", { text })
-      .then((res) => res.json())
-      .then((data) => {
+    // Prefer local conversion (no API usage). Fallback to server when it fails.
+    getLocalJapaneseReading(text)
+      .then(({ hiragana: h, romaji: r }) => {
         if (cancelled) return;
-        const nextH =
-          typeof data?.hiragana === "string" ? data.hiragana : toHiraganaLoose(text);
-        const nextR = typeof data?.romaji === "string" ? data.romaji : "";
+        const nextH = typeof h === "string" && h.trim() ? h : toHiraganaLoose(text);
+        const nextR = typeof r === "string" ? r : "";
         setHiragana(nextH);
         setRomaji(nextR);
         mergeReadingsIntoCache({ [text]: { hiragana: nextH, romaji: nextR } });
       })
       .catch(() => {
-        if (!cancelled) {
-          setHiragana(toHiraganaLoose(text));
-          setRomaji("");
-        }
+        apiRequest("POST", "/api/japanese/reading", { text })
+          .then((res) => res.json())
+          .then((data) => {
+            if (cancelled) return;
+            const nextH =
+              typeof data?.hiragana === "string"
+                ? data.hiragana
+                : toHiraganaLoose(text);
+            const nextR = typeof data?.romaji === "string" ? data.romaji : "";
+            setHiragana(nextH);
+            setRomaji(nextR);
+            mergeReadingsIntoCache({ [text]: { hiragana: nextH, romaji: nextR } });
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setHiragana(toHiraganaLoose(text));
+              setRomaji("");
+            }
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+        return;
       })
       .finally(() => {
+        // If local succeeded, clear loading here.
         if (!cancelled) setLoading(false);
       });
 

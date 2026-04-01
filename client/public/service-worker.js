@@ -1,4 +1,4 @@
-const CACHE_NAME = 'belajar-v7';
+const CACHE_NAME = 'belajar-v8';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -49,4 +49,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  // Take control immediately after activation.
+  self.clients.claim();
 });
