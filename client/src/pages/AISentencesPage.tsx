@@ -10,6 +10,10 @@ import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
+import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
+import { difficultyLabel, situationDisplay } from "@/lib/bilingualLabels";
 
 interface AISentence {
   indonesian: string;
@@ -25,13 +29,7 @@ const SITUATIONS = [
   "郵便局", "レストラン", "カフェ", "ビジネス", "電話", "約束"
 ];
 
-const DIFFICULTIES = [
-  { value: 1, label: "超初級" },
-  { value: 3, label: "初級" },
-  { value: 5, label: "中級" },
-  { value: 7, label: "上級" },
-  { value: 9, label: "超上級" }
-];
+const DIFFICULTY_VALUES = [1, 3, 5, 7, 9] as const;
 
 export default function AISentencesPage() {
   const [, setLocation] = useLocation();
@@ -42,7 +40,13 @@ export default function AISentencesPage() {
   const [difficulty, setDifficulty] = useState(3);
   const [showSettings, setShowSettings] = useState(true);
   const { toast } = useToast();
-  const { speakIndonesian, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
+  const { speakIndonesian, speakJapanese, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const currentSentence = sentences[currentIndex];
+  const jpReading = useJapaneseReading(
+    currentSentence?.japanese || "",
+    learnerMode === "id" && !!currentSentence,
+  );
 
   const generateMutation = useMutation({
     mutationFn: async ({ situation, difficulty }: { situation: string; difficulty: number }) => {
@@ -59,19 +63,22 @@ export default function AISentencesPage() {
       setIsFlipped(false);
       setShowSettings(false);
       toast({
-        description: `${data.sentences.length}個の新しい文章を生成しました！`,
+        description:
+          learnerMode === "ja"
+            ? `${data.sentences.length}個の新しい文章を生成しました！`
+            : `${data.sentences.length} kalimat baru dibuat.`,
       });
     },
     onError: (error: any) => {
       toast({
-        title: "エラー",
-        description: error.message || "文章の生成に失敗しました",
+        title: learnerMode === "ja" ? "エラー" : "Kesalahan",
+        description:
+          error.message ||
+          (learnerMode === "ja" ? "文章の生成に失敗しました" : "Gagal membuat kalimat."),
         variant: "destructive",
       });
     },
   });
-
-  const currentSentence = sentences[currentIndex];
 
   const handleGenerate = () => {
     generateMutation.mutate({ situation, difficulty });
@@ -88,13 +95,22 @@ export default function AISentencesPage() {
     
     if (!isSpeechSupported) {
       toast({
-        description: "お使いのブラウザは音声機能に対応していません",
+        description:
+          learnerMode === "ja"
+            ? "お使いのブラウザは音声機能に対応していません"
+            : "Browser Anda tidak mendukung suara.",
         variant: "destructive",
       });
       return;
     }
-    
-    speakIndonesian(currentSentence.indonesian);
+
+    if (learnerMode === "ja") {
+      if (!isFlipped) speakIndonesian(currentSentence.indonesian);
+      else speakJapanese(currentSentence.japanese);
+    } else {
+      if (!isFlipped) speakJapanese(currentSentence.japanese);
+      else speakIndonesian(currentSentence.indonesian);
+    }
   };
 
   const handlePrevious = () => {
@@ -122,22 +138,28 @@ export default function AISentencesPage() {
             onClick={() => setLocation("/")}
             data-testid="button-back"
           >
-            メニューへ戻る
+            {learnerMode === "ja" ? "メニューへ戻る" : "Kembali ke menu"}
           </Button>
         </div>
 
         <Card>
           <CardContent className="p-6 space-y-6">
             <div className="text-center space-y-2">
-              <h1 className="text-2xl font-bold">AI無限文章学習</h1>
+              <h1 className="text-2xl font-bold">
+                {learnerMode === "ja" ? "AI無限文章学習" : "Kalimat AI tanpa batas"}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                AIが無限に新しい文章を生成します
+                {learnerMode === "ja"
+                  ? "AIが無限に新しい文章を生成します"
+                  : "AI membuat kalimat latihan bahasa Jepang baru secara terus-menerus."}
               </p>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="situation">シチュエーション</Label>
+                <Label htmlFor="situation">
+                  {learnerMode === "ja" ? "シチュエーション" : "Situasi"}
+                </Label>
                 <Select value={situation} onValueChange={setSituation}>
                   <SelectTrigger id="situation" data-testid="select-situation">
                     <SelectValue />
@@ -145,7 +167,7 @@ export default function AISentencesPage() {
                   <SelectContent>
                     {SITUATIONS.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {situationDisplay(s, learnerMode)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -153,7 +175,7 @@ export default function AISentencesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="difficulty">難易度</Label>
+                <Label htmlFor="difficulty">{learnerMode === "ja" ? "難易度" : "Tingkat kesulitan"}</Label>
                 <Select 
                   value={difficulty.toString()} 
                   onValueChange={(v) => setDifficulty(Number(v))}
@@ -162,9 +184,9 @@ export default function AISentencesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {DIFFICULTIES.map((d) => (
-                      <SelectItem key={d.value} value={d.value.toString()}>
-                        {d.label}
+                    {DIFFICULTY_VALUES.map((v) => (
+                      <SelectItem key={v} value={v.toString()}>
+                        {difficultyLabel(v, learnerMode)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -180,12 +202,12 @@ export default function AISentencesPage() {
                 {generateMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    生成中...
+                    {learnerMode === "ja" ? "生成中..." : "Membuat..."}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2" />
-                    文章を生成
+                    {learnerMode === "ja" ? "文章を生成" : "Buat kalimat"}
                   </>
                 )}
               </Button>
@@ -199,17 +221,21 @@ export default function AISentencesPage() {
   return (
     <div className="p-4 space-y-6" data-testid="page-ai-sentences">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">AI文章学習</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {learnerMode === "ja" ? "AI文章学習" : "Belajar kalimat AI"}
+        </h1>
         <div className="flex items-center justify-center gap-2">
           <Badge variant="outline" data-testid="badge-category">
             {currentSentence.category}
           </Badge>
           <Badge variant="secondary">
-            難易度 {currentSentence.difficulty}/10
+            {learnerMode === "ja" ? "難易度" : "Kesulitan"} {currentSentence.difficulty}/10
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          {currentIndex + 1} / {sentences.length} （次の文章は自動生成）
+          {learnerMode === "ja"
+            ? `${currentIndex + 1} / ${sentences.length} （次の文章は自動生成）`
+            : `${currentIndex + 1} / ${sentences.length} • set berikutnya otomatis`}
         </p>
       </div>
 
@@ -222,40 +248,76 @@ export default function AISentencesPage() {
           <CardContent className="p-8 flex flex-col items-center justify-center min-h-[320px] relative">
             {!isFlipped ? (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 w-full">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    インドネシア語の文章
+                    {learnerMode === "ja" ? "インドネシア語の文章" : "Kalimat bahasa Jepang"}
                   </p>
-                  <p className="text-2xl font-bold text-foreground leading-relaxed" data-testid="text-indonesian-sentence">
-                    {currentSentence.indonesian}
-                  </p>
+                  {learnerMode === "ja" ? (
+                    <p
+                      className="text-2xl font-bold text-foreground leading-relaxed"
+                      data-testid="text-indonesian-sentence"
+                    >
+                      {currentSentence.indonesian}
+                    </p>
+                  ) : (
+                    <div data-testid="text-japanese-sentence" className="w-full">
+                      <JapaneseLearnerReading
+                        reading={jpReading}
+                        kanaClassName="text-2xl font-bold text-foreground leading-relaxed"
+                      />
+                    </div>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
-                  カードをタップして日本語訳を表示
+                  {learnerMode === "ja"
+                    ? "カードをタップして日本語訳を表示"
+                    : "Ketuk kartu untuk terjemahan bahasa Indonesia"}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 w-full">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    日本語訳
+                    {learnerMode === "ja" ? "日本語訳" : "Bahasa Indonesia"}
                   </p>
-                  <p className="text-2xl font-bold text-primary leading-relaxed" data-testid="text-japanese-sentence">
-                    {currentSentence.japanese}
-                  </p>
+                  {learnerMode === "ja" ? (
+                    <p
+                      className="text-2xl font-bold text-primary leading-relaxed"
+                      data-testid="text-japanese-sentence"
+                    >
+                      {currentSentence.japanese}
+                    </p>
+                  ) : (
+                    <p
+                      className="text-2xl font-bold text-primary leading-relaxed"
+                      data-testid="text-indonesian-sentence"
+                    >
+                      {currentSentence.indonesian}
+                    </p>
+                  )}
                 </div>
-                <div className="text-center space-y-1">
-                  <p className="text-base text-muted-foreground">
-                    {currentSentence.indonesian}
-                  </p>
+                <div className="text-center space-y-1 w-full">
+                  {learnerMode === "ja" ? (
+                    <p className="text-base text-muted-foreground">{currentSentence.indonesian}</p>
+                  ) : (
+                    <div className="text-base text-muted-foreground space-y-0.5">
+                      {jpReading.romaji ? (
+                        <p className="text-sm sm:text-base tracking-wide font-medium">{jpReading.romaji}</p>
+                      ) : null}
+                      <p className="leading-relaxed">
+                        {jpReading.kana}（{jpReading.original}）
+                      </p>
+                    </div>
+                  )}
                   {currentSentence.context && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      使用場面: {currentSentence.context}
+                      {learnerMode === "ja" ? "使用場面: " : "Konteks: "}
+                      {currentSentence.context}
                     </p>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  カードをタップして戻る
+                  {learnerMode === "ja" ? "カードをタップして戻る" : "Ketuk kartu untuk kembali"}
                 </p>
               </div>
             )}
@@ -278,7 +340,7 @@ export default function AISentencesPage() {
           variant="outline"
           size="icon"
           onClick={handleSpeak}
-          title="発音を聞く"
+          title={learnerMode === "ja" ? "発音を聞く" : "Dengarkan pengucapan"}
           data-testid="button-speak"
         >
           <Volume2 className="w-5 h-5" />
@@ -288,7 +350,7 @@ export default function AISentencesPage() {
           variant="outline"
           size="icon"
           onClick={() => setShowSettings(true)}
-          title="設定"
+          title={learnerMode === "ja" ? "設定" : "Pengaturan"}
           data-testid="button-settings"
         >
           <Settings className="w-5 h-5" />
@@ -314,12 +376,12 @@ export default function AISentencesPage() {
           {generateMutation.isPending ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              生成中...
+              {learnerMode === "ja" ? "生成中..." : "Membuat..."}
             </>
           ) : (
             <>
               <RefreshCw className="w-4 h-4 mr-2" />
-              新しい文章セットを生成
+              {learnerMode === "ja" ? "新しい文章セットを生成" : "Buat set kalimat baru"}
             </>
           )}
         </Button>

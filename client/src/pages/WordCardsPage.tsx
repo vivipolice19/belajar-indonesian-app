@@ -167,7 +167,7 @@ export default function WordCardsPage() {
                   ) : (
                     <div className="text-lg text-muted-foreground space-y-0.5">
                       {jpReading.romaji ? (
-                        <p className="text-xs tracking-wide">{jpReading.romaji}</p>
+                        <p className="text-sm sm:text-base tracking-wide font-medium">{jpReading.romaji}</p>
                       ) : null}
                       <p>
                         {jpReading.kana}（{jpReading.original}）

@@ -276,12 +276,15 @@ export default function QuizPage() {
   const pronounceWord = (text: string, lang: "id-ID" | "ja-JP") => {
     if (!isSpeechSupported) {
       toast({
-        description: "お使いのブラウザは音声機能に対応していません",
+        description:
+          learnerMode === "ja"
+            ? "お使いのブラウザは音声機能に対応していません"
+            : "Browser Anda tidak mendukung suara.",
         variant: "destructive",
       });
       return;
     }
-    
+
     speak(text, lang, lang === "ja-JP" ? 0.95 : 0.85);
   };
 
@@ -298,7 +301,8 @@ export default function QuizPage() {
     const question = generateSingleSentenceQuestion();
     if (!question) {
       toast({
-        description: "文章データが不足しています",
+        description:
+          learnerMode === "ja" ? "文章データが不足しています" : "Data kalimat tidak cukup.",
         variant: "destructive",
       });
       return;
@@ -321,7 +325,10 @@ export default function QuizPage() {
       const question = generateSingleSentenceQuestion();
       if (!question) {
         toast({
-          description: "文章データが不足しています。メニューに戻ります。",
+          description:
+            learnerMode === "ja"
+              ? "文章データが不足しています。メニューに戻ります。"
+              : "Data kalimat tidak cukup. Kembali ke menu.",
           variant: "destructive",
         });
         setTimeout(() => {
@@ -347,13 +354,13 @@ export default function QuizPage() {
       setScore((prev) => prev + 1);
       completeQuiz();
       toast({
-        description: "正解！",
+        description: learnerMode === "ja" ? "正解！" : "Benar!",
         duration: 1500,
       });
     } else {
       playIncorrectSound();
       toast({
-        description: "不正解...",
+        description: learnerMode === "ja" ? "不正解..." : "Salah...",
         duration: 1500,
         variant: "destructive",
       });
@@ -377,9 +384,11 @@ export default function QuizPage() {
     return (
       <div className="p-4 space-y-6" data-testid="page-quiz-menu">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">クイズモード選択</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {learnerMode === "ja" ? "クイズモード選択" : "Pilih mode kuis"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            クイズに挑戦しよう！
+            {learnerMode === "ja" ? "クイズに挑戦しよう！" : "Ayo latihan kuis!"}
           </p>
         </div>
 
@@ -390,13 +399,19 @@ export default function QuizPage() {
                 <BookOpen className="w-6 h-6 text-primary" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-foreground">単語クイズ</h3>
+                <h3 className="text-lg font-bold text-foreground">
+                  {learnerMode === "ja" ? "単語クイズ" : "Kuis kosakata"}
+                </h3>
                 <p className="text-sm text-muted-foreground">
-                  インドネシア語の単語の意味を答える（無限ループ）
+                  {learnerMode === "ja"
+                    ? "インドネシア語の単語の意味を答える（無限ループ）"
+                    : "Jawab arti kosakata bahasa Jepang pilih bahasa Indonesia (tanpa batas)."}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                   <Volume2 className="w-3 h-3" />
-                  各問題で音声発音が聞けます
+                  {learnerMode === "ja"
+                    ? "各問題で音声発音が聞けます"
+                    : "Setiap soal bisa didengarkan pengucapannya"}
                 </p>
               </div>
             </CardContent>
@@ -412,13 +427,19 @@ export default function QuizPage() {
                 <BookText className="w-6 h-6 text-accent" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-foreground">文章クイズ</h3>
+                <h3 className="text-lg font-bold text-foreground">
+                  {learnerMode === "ja" ? "文章クイズ" : "Kuis kalimat"}
+                </h3>
                 <p className="text-sm text-muted-foreground">
-                  文章の意味を答える（無限ループ）
+                  {learnerMode === "ja"
+                    ? "文章の意味を答える（無限ループ）"
+                    : "Jawab arti kalimat bahasa Jepang pilih bahasa Indonesia (tanpa batas)."}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                   <Volume2 className="w-3 h-3" />
-                  各問題で音声発音が聞けます
+                  {learnerMode === "ja"
+                    ? "各問題で音声発音が聞けます"
+                    : "Setiap soal bisa didengarkan pengucapannya"}
                 </p>
               </div>
             </CardContent>
@@ -431,7 +452,9 @@ export default function QuizPage() {
   if (!currentQuestion) {
     return (
       <div className="p-4 flex items-center justify-center min-h-[50vh]">
-        <p className="text-muted-foreground">クイズを準備中...</p>
+        <p className="text-muted-foreground">
+          {learnerMode === "ja" ? "クイズを準備中..." : "Menyiapkan kuis..."}
+        </p>
       </div>
     );
   }
@@ -439,7 +462,9 @@ export default function QuizPage() {
   if (!directionalQuestion) {
     return (
       <div className="p-4 flex items-center justify-center min-h-[50vh]">
-        <p className="text-muted-foreground">クイズを準備中...</p>
+        <p className="text-muted-foreground">
+          {learnerMode === "ja" ? "クイズを準備中..." : "Menyiapkan kuis..."}
+        </p>
       </div>
     );
   }
@@ -450,10 +475,10 @@ export default function QuizPage() {
     mode === "words"
       ? learnerMode === "ja"
         ? "この単語の意味は？"
-        : "この日本語の意味は？"
+        : "Arti kosakata Jepang ini?"
       : learnerMode === "ja"
         ? "この文章の意味は？"
-        : "この日本語の意味は？";
+        : "Arti kalimat Jepang ini?";
 
   return (
     <div className="p-4 space-y-6" data-testid="page-quiz">
@@ -468,11 +493,19 @@ export default function QuizPage() {
             ←
           </Button>
           <h1 className="text-xl font-bold text-foreground">
-            {mode === "words" ? "単語クイズ" : "文章クイズ"}
+            {mode === "words"
+              ? learnerMode === "ja"
+                ? "単語クイズ"
+                : "Kuis kosakata"
+              : learnerMode === "ja"
+                ? "文章クイズ"
+                : "Kuis kalimat"}
           </h1>
         </div>
         <Badge variant="secondary" data-testid="text-question-count">
-          問{questionCount + 1}問目 | スコア: {score}
+          {learnerMode === "ja"
+            ? `問${questionCount + 1}問目 | スコア: ${score}`
+            : `Soal ${questionCount + 1} | Skor: ${score}`}
         </Badge>
       </div>
 
@@ -504,7 +537,13 @@ export default function QuizPage() {
               data-testid="button-pronounce-quiz"
             >
               <Volume2 className="w-6 h-6" />
-              {isSpeechSupported ? "発音を聞く" : "音声非対応"}
+              {isSpeechSupported
+                ? learnerMode === "ja"
+                  ? "発音を聞く"
+                  : "Dengarkan"
+                : learnerMode === "ja"
+                  ? "音声非対応"
+                  : "Tanpa suara"}
             </Button>
           </div>
         </CardContent>
@@ -548,7 +587,7 @@ export default function QuizPage() {
         <div className="flex items-center gap-2">
           <Trophy className="w-5 h-5 text-accent" />
           <span className="font-semibold" data-testid="text-current-score">
-            スコア: {score}
+            {learnerMode === "ja" ? "スコア" : "Skor"}: {score}
           </span>
         </div>
       </div>

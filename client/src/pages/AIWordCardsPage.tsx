@@ -10,6 +10,10 @@ import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { useLearner } from "@/hooks/useLearner";
+import { useJapaneseReading } from "@/hooks/useJapaneseReading";
+import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
+import { difficultyLabel, themeDisplay } from "@/lib/bilingualLabels";
 
 interface AIWord {
   indonesian: string;
@@ -25,13 +29,7 @@ const THEMES = [
   "旅行", "ビジネス", "学校", "趣味", "自然"
 ];
 
-const DIFFICULTIES = [
-  { value: 1, label: "超初級" },
-  { value: 3, label: "初級" },
-  { value: 5, label: "中級" },
-  { value: 7, label: "上級" },
-  { value: 9, label: "超上級" }
-];
+const DIFFICULTY_VALUES = [1, 3, 5, 7, 9] as const;
 
 export default function AIWordCardsPage() {
   const [, setLocation] = useLocation();
@@ -42,7 +40,13 @@ export default function AIWordCardsPage() {
   const [difficulty, setDifficulty] = useState(3);
   const [showSettings, setShowSettings] = useState(true);
   const { toast } = useToast();
-  const { speakIndonesian, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const { mode: learnerMode } = useLearner();
+  const { speakIndonesian, speakJapanese, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const currentWord = words[currentIndex];
+  const jpReading = useJapaneseReading(
+    currentWord?.japanese || "",
+    learnerMode === "id" && !!currentWord,
+  );
 
   const generateMutation = useMutation({
     mutationFn: async ({ theme, difficulty }: { theme: string; difficulty: number }) => {
@@ -59,19 +63,22 @@ export default function AIWordCardsPage() {
       setIsFlipped(false);
       setShowSettings(false);
       toast({
-        description: `${data.words.length}個の新しい単語を生成しました！`,
+        description:
+          learnerMode === "ja"
+            ? `${data.words.length}個の新しい単語を生成しました！`
+            : `${data.words.length} kosakata baru dibuat.`,
       });
     },
     onError: (error: any) => {
       toast({
-        title: "エラー",
-        description: error.message || "単語の生成に失敗しました",
+        title: learnerMode === "ja" ? "エラー" : "Kesalahan",
+        description:
+          error.message ||
+          (learnerMode === "ja" ? "単語の生成に失敗しました" : "Gagal membuat kosakata."),
         variant: "destructive",
       });
     },
   });
-
-  const currentWord = words[currentIndex];
 
   const handleGenerate = () => {
     generateMutation.mutate({ theme, difficulty });
@@ -88,13 +95,22 @@ export default function AIWordCardsPage() {
     
     if (!isSpeechSupported) {
       toast({
-        description: "お使いのブラウザは音声機能に対応していません",
+        description:
+          learnerMode === "ja"
+            ? "お使いのブラウザは音声機能に対応していません"
+            : "Browser Anda tidak mendukung suara.",
         variant: "destructive",
       });
       return;
     }
-    
-    speakIndonesian(currentWord.indonesian);
+
+    if (learnerMode === "ja") {
+      if (!isFlipped) speakIndonesian(currentWord.indonesian);
+      else speakJapanese(currentWord.japanese);
+    } else {
+      if (!isFlipped) speakJapanese(currentWord.japanese);
+      else speakIndonesian(currentWord.indonesian);
+    }
   };
 
   const handlePrevious = () => {
@@ -122,22 +138,26 @@ export default function AIWordCardsPage() {
             onClick={() => setLocation("/")}
             data-testid="button-back"
           >
-            メニューへ戻る
+            {learnerMode === "ja" ? "メニューへ戻る" : "Kembali ke menu"}
           </Button>
         </div>
 
         <Card>
           <CardContent className="p-6 space-y-6">
             <div className="text-center space-y-2">
-              <h1 className="text-2xl font-bold">AI無限単語カード</h1>
+              <h1 className="text-2xl font-bold">
+                {learnerMode === "ja" ? "AI無限単語カード" : "Kartu kosakata AI (tanpa batas)"}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                AIが無限に新しい単語を生成します
+                {learnerMode === "ja"
+                  ? "AIが無限に新しい単語を生成します"
+                  : "AI membuat kosakata baru tanpa henti untuk latihan bahasa Jepang."}
               </p>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="theme">テーマ</Label>
+                <Label htmlFor="theme">{learnerMode === "ja" ? "テーマ" : "Tema"}</Label>
                 <Select value={theme} onValueChange={setTheme}>
                   <SelectTrigger id="theme" data-testid="select-theme">
                     <SelectValue />
@@ -145,7 +165,7 @@ export default function AIWordCardsPage() {
                   <SelectContent>
                     {THEMES.map((t) => (
                       <SelectItem key={t} value={t}>
-                        {t}
+                        {themeDisplay(t, learnerMode)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -153,7 +173,7 @@ export default function AIWordCardsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="difficulty">難易度</Label>
+                <Label htmlFor="difficulty">{learnerMode === "ja" ? "難易度" : "Tingkat kesulitan"}</Label>
                 <Select 
                   value={difficulty.toString()} 
                   onValueChange={(v) => setDifficulty(Number(v))}
@@ -162,9 +182,9 @@ export default function AIWordCardsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {DIFFICULTIES.map((d) => (
-                      <SelectItem key={d.value} value={d.value.toString()}>
-                        {d.label}
+                    {DIFFICULTY_VALUES.map((v) => (
+                      <SelectItem key={v} value={v.toString()}>
+                        {difficultyLabel(v, learnerMode)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -180,12 +200,12 @@ export default function AIWordCardsPage() {
                 {generateMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    生成中...
+                    {learnerMode === "ja" ? "生成中..." : "Membuat..."}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2" />
-                    単語を生成
+                    {learnerMode === "ja" ? "単語を生成" : "Buat kosakata"}
                   </>
                 )}
               </Button>
@@ -199,17 +219,21 @@ export default function AIWordCardsPage() {
   return (
     <div className="p-4 space-y-6" data-testid="page-ai-cards">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">AI単語カード</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {learnerMode === "ja" ? "AI単語カード" : "Kartu kosakata AI"}
+        </h1>
         <div className="flex items-center justify-center gap-2">
           <Badge variant="outline" data-testid="badge-category">
             {currentWord.category}
           </Badge>
           <Badge variant="secondary">
-            難易度 {currentWord.difficulty}/10
+            {learnerMode === "ja" ? "難易度" : "Kesulitan"} {currentWord.difficulty}/10
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          {currentIndex + 1} / {words.length} （次の単語は自動生成）
+          {learnerMode === "ja"
+            ? `${currentIndex + 1} / ${words.length} （次の単語は自動生成）`
+            : `${currentIndex + 1} / ${words.length} • set berikutnya otomatis`}
         </p>
       </div>
 
@@ -222,40 +246,64 @@ export default function AIWordCardsPage() {
           <CardContent className="p-8 flex flex-col items-center justify-center min-h-[320px] relative">
             {!isFlipped ? (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 w-full">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    インドネシア語
+                    {learnerMode === "ja" ? "インドネシア語" : "Bahasa Jepang"}
                   </p>
-                  <p className="text-4xl font-bold text-foreground" data-testid="text-indonesian">
-                    {currentWord.indonesian}
-                  </p>
+                  {learnerMode === "ja" ? (
+                    <p className="text-4xl font-bold text-foreground" data-testid="text-indonesian">
+                      {currentWord.indonesian}
+                    </p>
+                  ) : (
+                    <div data-testid="text-japanese">
+                      <JapaneseLearnerReading
+                        reading={jpReading}
+                        kanaClassName="text-4xl text-foreground"
+                      />
+                    </div>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
-                  カードをタップして日本語の意味を表示
+                  {learnerMode === "ja"
+                    ? "カードをタップして日本語の意味を表示"
+                    : "Ketuk kartu untuk menampilkan bahasa Indonesia"}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    日本語の意味
+                    {learnerMode === "ja" ? "日本語の意味" : "Bahasa Indonesia"}
                   </p>
-                  <p className="text-3xl font-bold text-primary" data-testid="text-japanese">
-                    {currentWord.japanese}
+                  <p
+                    className="text-3xl font-bold text-primary"
+                    data-testid={learnerMode === "ja" ? "text-japanese" : "text-indonesian"}
+                  >
+                    {learnerMode === "ja" ? currentWord.japanese : currentWord.indonesian}
                   </p>
                 </div>
-                <div className="text-center space-y-1">
-                  <p className="text-lg text-muted-foreground">
-                    {currentWord.indonesian}
-                  </p>
+                <div className="text-center space-y-1 w-full">
+                  {learnerMode === "ja" ? (
+                    <p className="text-lg text-muted-foreground">{currentWord.indonesian}</p>
+                  ) : (
+                    <div className="text-lg text-muted-foreground space-y-0.5">
+                      {jpReading.romaji ? (
+                        <p className="text-sm sm:text-base tracking-wide font-medium">{jpReading.romaji}</p>
+                      ) : null}
+                      <p>
+                        {jpReading.kana}（{jpReading.original}）
+                      </p>
+                    </div>
+                  )}
                   {currentWord.pronunciation_guide && (
                     <p className="text-sm text-muted-foreground">
-                      発音: {currentWord.pronunciation_guide}
+                      {learnerMode === "ja" ? "発音: " : "Panduan bunyi: "}
+                      {currentWord.pronunciation_guide}
                     </p>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  カードをタップして戻る
+                  {learnerMode === "ja" ? "カードをタップして戻る" : "Ketuk kartu untuk kembali"}
                 </p>
               </div>
             )}
@@ -278,7 +326,7 @@ export default function AIWordCardsPage() {
           variant="outline"
           size="icon"
           onClick={handleSpeak}
-          title="発音を聞く"
+          title={learnerMode === "ja" ? "発音を聞く" : "Dengarkan pengucapan"}
           data-testid="button-speak"
         >
           <Volume2 className="w-5 h-5" />
@@ -288,7 +336,7 @@ export default function AIWordCardsPage() {
           variant="outline"
           size="icon"
           onClick={() => setShowSettings(true)}
-          title="設定"
+          title={learnerMode === "ja" ? "設定" : "Pengaturan"}
           data-testid="button-settings"
         >
           <Settings className="w-5 h-5" />
@@ -314,12 +362,12 @@ export default function AIWordCardsPage() {
           {generateMutation.isPending ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              生成中...
+              {learnerMode === "ja" ? "生成中..." : "Membuat..."}
             </>
           ) : (
             <>
               <RefreshCw className="w-4 h-4 mr-2" />
-              新しい単語セットを生成
+              {learnerMode === "ja" ? "新しい単語セットを生成" : "Buat set kosakata baru"}
             </>
           )}
         </Button>

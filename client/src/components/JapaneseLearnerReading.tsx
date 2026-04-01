@@ -26,7 +26,7 @@ export function JapaneseLearnerReading({
   return (
     <div className={cn("flex flex-col items-center gap-0.5 text-center", wrapperClassName)}>
       {reading.romaji ? (
-        <span className={cn("text-[0.7rem] leading-tight text-muted-foreground tracking-wide", romajiClassName)}>
+        <span className={cn("text-sm sm:text-base leading-snug text-muted-foreground tracking-wide font-medium", romajiClassName)}>
           {reading.romaji}
         </span>
       ) : null}

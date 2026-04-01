@@ -6,11 +6,13 @@ import { Progress } from "@/components/ui/progress";
 import { Trophy, Keyboard, Shuffle, ArrowLeft, Eye, EyeOff, SkipForward } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { WORDS_DATA } from "@shared/types";
+import { useLearner } from "@/hooks/useLearner";
 
 type GameType = null | "typing" | "matching";
 type MatchCard = { id: number; text: string; type: "indonesian" | "japanese"; matched: boolean };
 
 export default function MiniGamePage() {
+  const { mode: learnerMode } = useLearner();
   const [gameType, setGameType] = useState<GameType>(null);
   const [timeLeft, setTimeLeft] = useState(60);
   const [score, setScore] = useState(0);
@@ -57,8 +59,9 @@ export default function MiniGamePage() {
     setIsPlaying(false);
     setGameComplete(true);
     toast({
-      title: "ゲーム終了！",
-      description: `スコア: ${score}`,
+      title: learnerMode === "ja" ? "ゲーム終了！" : "Permainan selesai!",
+      description:
+        learnerMode === "ja" ? `スコア: ${score}` : `Skor: ${score}`,
     });
   };
 
@@ -110,11 +113,15 @@ export default function MiniGamePage() {
     setInputValue(value);
     
     const currentWord = typingWords[currentWordIndex];
-    if (value.toLowerCase() === currentWord.indonesian.toLowerCase()) {
+    const ok =
+      learnerMode === "ja"
+        ? value.toLowerCase() === currentWord.indonesian.toLowerCase()
+        : value.trim() === currentWord.japanese.trim();
+    if (ok) {
       setScore((prev) => prev + 1);
       setCorrectCount((prev) => prev + 1);
       toast({
-        description: "正解！ +1",
+        description: learnerMode === "ja" ? "正解！ +1" : "Benar! +1",
         duration: 1000,
       });
       
@@ -163,7 +170,7 @@ export default function MiniGamePage() {
           }
           
           toast({
-            description: "正解！ +1",
+            description: learnerMode === "ja" ? "正解！ +1" : "Benar! +1",
             duration: 1000,
           });
         }, 500);
@@ -171,7 +178,7 @@ export default function MiniGamePage() {
         setTimeout(() => {
           setSelectedCards([]);
           toast({
-            description: "不正解",
+            description: learnerMode === "ja" ? "不正解" : "Salah",
             duration: 1000,
           });
         }, 1000);
@@ -193,7 +200,7 @@ export default function MiniGamePage() {
       setInputValue("");
       setShowAnswer(false);
       toast({
-        description: "スキップしました",
+        description: learnerMode === "ja" ? "スキップしました" : "Dilewati",
         duration: 1000,
       });
     }
@@ -216,7 +223,7 @@ export default function MiniGamePage() {
           data-testid="button-back-to-menu"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          ゲーム選択に戻る
+          {learnerMode === "ja" ? "ゲーム選択に戻る" : "Kembali pilih permainan"}
         </Button>
 
         <div className="flex flex-col items-center py-8 space-y-4">
@@ -224,14 +231,26 @@ export default function MiniGamePage() {
             <Trophy className="w-12 h-12 text-accent" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">
-            {gameType === "typing" ? "タイピング完了！" : "ゲーム終了！"}
+            {gameType === "typing"
+              ? learnerMode === "ja"
+                ? "タイピング完了！"
+                : "Selesai mengetik!"
+              : learnerMode === "ja"
+                ? "ゲーム終了！"
+                : "Permainan selesai!"}
           </h1>
           <div className="text-center space-y-2">
             <p className="text-4xl font-extrabold text-primary" data-testid="text-game-score">
               {score}
             </p>
             <p className="text-muted-foreground">
-              {gameType === "typing" ? "正解数" : "マッチング数"}
+              {gameType === "typing"
+                ? learnerMode === "ja"
+                  ? "正解数"
+                  : "Jawaban benar"
+                : learnerMode === "ja"
+                  ? "マッチング数"
+                  : "Pasangan"}
             </p>
           </div>
         </div>
@@ -242,7 +261,7 @@ export default function MiniGamePage() {
           className="w-full"
           data-testid="button-play-again"
         >
-          もう一度プレイ
+          {learnerMode === "ja" ? "もう一度プレイ" : "Main lagi"}
         </Button>
       </div>
     );
@@ -252,9 +271,13 @@ export default function MiniGamePage() {
     return (
       <div className="p-4 space-y-6" data-testid="page-game-select">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">学習ゲーム</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {learnerMode === "ja" ? "学習ゲーム" : "Permainan belajar"}
+          </h1>
           <p className="text-muted-foreground">
-            楽しみながらインドネシア語を学習しよう！
+            {learnerMode === "ja"
+              ? "楽しみながらインドネシア語を学習しよう！"
+              : "Belajar bahasa Jepang sambil bermain!"}
           </p>
         </div>
 
@@ -271,13 +294,15 @@ export default function MiniGamePage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-foreground mb-1">
-                    タイピングゲーム
+                    {learnerMode === "ja" ? "タイピングゲーム" : "Ketik jawaban"}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    日本語の意味を見て、インドネシア語を入力しよう
+                    {learnerMode === "ja"
+                      ? "日本語の意味を見て、インドネシア語を入力しよう"
+                      : "Lihat bahasa Indonesia, ketik kosakata bahasa Jepang yang benar."}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    制限時間: 60秒
+                    {learnerMode === "ja" ? "制限時間: 60秒" : "Batas waktu: 60 detik"}
                   </p>
                 </div>
               </div>
@@ -296,13 +321,15 @@ export default function MiniGamePage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-foreground mb-1">
-                    マッチングゲーム
+                    {learnerMode === "ja" ? "マッチングゲーム" : "Cocokkan pasangan"}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    インドネシア語と日本語の意味をペアにしよう
+                    {learnerMode === "ja"
+                      ? "インドネシア語と日本語の意味をペアにしよう"
+                      : "Pasangkan arti bahasa Indonesia dan Jepang."}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    6組のペアを見つけよう
+                    {learnerMode === "ja" ? "6組のペアを見つけよう" : "Temukan 6 pasang"}
                   </p>
                 </div>
               </div>
@@ -319,7 +346,9 @@ export default function MiniGamePage() {
     return (
       <div className="p-4 space-y-6" data-testid="page-typing-game">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">タイピングゲーム</h1>
+          <h1 className="text-xl font-bold text-foreground">
+            {learnerMode === "ja" ? "タイピングゲーム" : "Ketik jawaban"}
+          </h1>
           <Button
             variant="ghost"
             size="sm"
@@ -327,7 +356,7 @@ export default function MiniGamePage() {
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            戻る
+            {learnerMode === "ja" ? "戻る" : "Kembali"}
           </Button>
         </div>
 
@@ -335,10 +364,10 @@ export default function MiniGamePage() {
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-muted-foreground">
-                残り時間
+                {learnerMode === "ja" ? "残り時間" : "Sisa waktu"}
               </span>
               <span className="text-2xl font-bold text-foreground" data-testid="text-time-left">
-                {timeLeft}秒
+                {learnerMode === "ja" ? `${timeLeft}秒` : `${timeLeft} dtk`}
               </span>
             </div>
             <Progress value={timePercentage} className="h-3" />
@@ -348,21 +377,25 @@ export default function MiniGamePage() {
         <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
           <CardContent className="p-8 text-center space-y-4">
             <p className="text-sm text-muted-foreground uppercase tracking-wide">
-              日本語の意味
+              {learnerMode === "ja" ? "日本語の意味" : "Bahasa Indonesia"}
             </p>
             <p className="text-3xl font-bold text-foreground" data-testid="text-japanese-prompt">
-              {currentWord?.japanese}
+              {learnerMode === "ja" ? currentWord?.japanese : currentWord?.indonesian}
             </p>
             {showAnswer && (
               <div className="pt-4 border-t border-border/50">
-                <p className="text-sm text-muted-foreground mb-2">答え</p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {learnerMode === "ja" ? "答え" : "Jawaban"}
+                </p>
                 <p className="text-2xl font-bold text-primary" data-testid="text-answer-display">
-                  {currentWord?.indonesian}
+                  {learnerMode === "ja" ? currentWord?.indonesian : currentWord?.japanese}
                 </p>
               </div>
             )}
             <p className="text-sm text-muted-foreground">
-              インドネシア語を入力してください
+              {learnerMode === "ja"
+                ? "インドネシア語を入力してください"
+                : "Ketik kosakata bahasa Jepang yang benar"}
             </p>
           </CardContent>
         </Card>
@@ -377,12 +410,12 @@ export default function MiniGamePage() {
             {showAnswer ? (
               <>
                 <EyeOff className="w-4 h-4 mr-2" />
-                答えを隠す
+                {learnerMode === "ja" ? "答えを隠す" : "Sembunyikan jawaban"}
               </>
             ) : (
               <>
                 <Eye className="w-4 h-4 mr-2" />
-                答えを見る
+                {learnerMode === "ja" ? "答えを見る" : "Lihat jawaban"}
               </>
             )}
           </Button>
@@ -393,7 +426,7 @@ export default function MiniGamePage() {
             data-testid="button-skip"
           >
             <SkipForward className="w-4 h-4 mr-2" />
-            スキップ
+            {learnerMode === "ja" ? "スキップ" : "Lewati"}
           </Button>
         </div>
 
@@ -403,18 +436,22 @@ export default function MiniGamePage() {
             type="text"
             value={inputValue}
             onChange={handleTypingInput}
-            placeholder="ここに入力..."
+            placeholder={learnerMode === "ja" ? "ここに入力..." : "Ketik di sini..."}
             className="text-center text-2xl h-14"
             data-testid="input-typing"
           />
           <p className="text-xs text-center text-muted-foreground">
-            ヒント: 小文字で入力してください
+            {learnerMode === "ja"
+              ? "ヒント: 小文字で入力してください"
+              : "Tips: untuk Indonesia gunakan huruf kecil; bahasa Jepang sesuai teks."}
           </p>
         </div>
 
         <Card>
           <CardContent className="p-6 text-center space-y-2">
-            <p className="text-sm text-muted-foreground">正解数</p>
+            <p className="text-sm text-muted-foreground">
+              {learnerMode === "ja" ? "正解数" : "Jawaban benar"}
+            </p>
             <p className="text-4xl font-extrabold text-primary" data-testid="text-typing-score">
               {correctCount} / {typingWords.length}
             </p>
@@ -428,7 +465,9 @@ export default function MiniGamePage() {
     return (
       <div className="p-4 space-y-6" data-testid="page-matching-game">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">マッチングゲーム</h1>
+          <h1 className="text-xl font-bold text-foreground">
+            {learnerMode === "ja" ? "マッチングゲーム" : "Cocokkan pasangan"}
+          </h1>
           <Button
             variant="ghost"
             size="sm"
@@ -436,7 +475,7 @@ export default function MiniGamePage() {
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
-            戻る
+            {learnerMode === "ja" ? "戻る" : "Kembali"}
           </Button>
         </div>
 
@@ -444,10 +483,10 @@ export default function MiniGamePage() {
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-muted-foreground">
-                残り時間
+                {learnerMode === "ja" ? "残り時間" : "Sisa waktu"}
               </span>
               <span className="text-2xl font-bold text-foreground" data-testid="text-time-left">
-                {timeLeft}秒
+                {learnerMode === "ja" ? `${timeLeft}秒` : `${timeLeft} dtk`}
               </span>
             </div>
             <Progress value={timePercentage} className="h-3" />
@@ -455,7 +494,9 @@ export default function MiniGamePage() {
         </Card>
 
         <div className="text-center space-y-1">
-          <p className="text-sm text-muted-foreground">マッチング数</p>
+          <p className="text-sm text-muted-foreground">
+            {learnerMode === "ja" ? "マッチング数" : "Pasangan"}
+          </p>
           <p className="text-3xl font-bold text-primary" data-testid="text-matching-score">
             {matchedPairs} / 6
           </p>
@@ -486,7 +527,9 @@ export default function MiniGamePage() {
         </div>
 
         <p className="text-xs text-center text-muted-foreground">
-          同じ意味のカードを2枚選んでペアにしよう
+          {learnerMode === "ja"
+            ? "同じ意味のカードを2枚選んでペアにしよう"
+            : "Pilih dua kartu artinya sama untuk memasangkan."}
         </p>
       </div>
     );
