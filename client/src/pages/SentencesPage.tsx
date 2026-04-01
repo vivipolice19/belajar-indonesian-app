@@ -18,13 +18,12 @@ export default function SentencesPage() {
   const { toast } = useToast();
   const { mode: learnerMode } = useLearner();
   const { speakIndonesian, speakJapanese, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const currentSentence = shuffledSentences[currentIndex];
   const jpReading = useJapaneseReading(currentSentence?.japanese || "", learnerMode === "id");
 
   useEffect(() => {
     setShuffledSentences([...SENTENCES_DATA].sort(() => Math.random() - 0.5));
   }, []);
-
-  const currentSentence = shuffledSentences[currentIndex];
 
   const handleCardClick = () => {
     if (!isFlipped) {

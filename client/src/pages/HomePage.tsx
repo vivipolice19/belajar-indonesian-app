@@ -2,9 +2,11 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { MascotIcon } from "@/components/MascotIcon";
 import { BookOpen, Brain, Gamepad2, Languages, Sparkles, MessageSquare } from "lucide-react";
+import { useLearner } from "@/hooks/useLearner";
 
 export default function HomePage() {
   const [, setLocation] = useLocation();
+  const { mode } = useLearner();
 
   const aiCards = [
     {
@@ -65,10 +67,12 @@ export default function HomePage() {
       <div className="flex flex-col items-center py-6 space-y-3">
         <MascotIcon size="lg" expression="happy" />
         <h1 className="text-2xl font-bold text-foreground">
-          Selamat datang!
+          {mode === "ja" ? "Selamat datang!" : "Selamat datang! / ようこそ！"}
         </h1>
         <p className="text-muted-foreground text-center">
-          今日も一緒にインドネシア語を学びましょう！
+          {mode === "ja"
+            ? "今日も一緒にインドネシア語を学びましょう！"
+            : "今日は日本語を学びましょう！ / Ayo belajar bahasa Jepang hari ini!"}
         </p>
       </div>
 

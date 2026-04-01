@@ -18,13 +18,12 @@ export default function WordCardsPage() {
   const { toast } = useToast();
   const { mode: learnerMode } = useLearner();
   const { speakIndonesian, speakJapanese, isSupported: isSpeechSupported } = useSpeechSynthesis();
+  const currentWord = shuffledWords[currentIndex];
   const jpReading = useJapaneseReading(currentWord?.japanese || "", learnerMode === "id");
 
   useEffect(() => {
     setShuffledWords([...WORDS_DATA].sort(() => Math.random() - 0.5));
   }, []);
-
-  const currentWord = shuffledWords[currentIndex];
 
   const handleCardClick = () => {
     if (!isFlipped) {

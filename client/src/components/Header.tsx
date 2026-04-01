@@ -5,6 +5,7 @@ import { useLearner } from "@/hooks/useLearner";
 
 export function Header() {
   const { mode, setMode } = useLearner();
+  const targetLabel = mode === "ja" ? "学習: インドネシア語" : "Belajar: Bahasa Jepang";
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-card border-b border-card-border shadow-sm safe-area-inset-top">
@@ -28,12 +29,13 @@ export function Header() {
               data-testid="toggle-learner"
             >
               <ToggleGroupItem value="ja" className="h-8 px-2 text-xs">
-                日本人
+                日本語話者
               </ToggleGroupItem>
               <ToggleGroupItem value="id" className="h-8 px-2 text-xs">
-                ID人
+                Penutur ID
               </ToggleGroupItem>
             </ToggleGroup>
+            <p className="text-[10px] text-muted-foreground leading-none">{targetLabel}</p>
           </div>
           
           <div className="shrink-0">
