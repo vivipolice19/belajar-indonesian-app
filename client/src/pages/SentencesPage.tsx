@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ export default function SentencesPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [shuffledSentences, setShuffledSentences] = useState([...SENTENCES_DATA]);
-  const readingPrefetchDone = useRef(false);
+  const prefetchTimer = useRef<number | null>(null);
   const { progress, markSentenceLearned, markSentencePronounced } = useGameProgress();
   const { toast } = useToast();
   const { mode: learnerMode } = useLearner();
@@ -28,11 +28,33 @@ export default function SentencesPage() {
     setShuffledSentences([...SENTENCES_DATA].sort(() => Math.random() - 0.5));
   }, []);
 
+  const nearbyJapaneseTexts = useMemo(() => {
+    if (learnerMode !== "id" || shuffledSentences.length === 0) return [];
+    const windowSize = 8;
+    const out: string[] = [];
+    for (let i = 0; i < windowSize; i++) {
+      const s = shuffledSentences[(currentIndex + i) % shuffledSentences.length];
+      if (s?.japanese) out.push(s.japanese);
+    }
+    return out;
+  }, [learnerMode, shuffledSentences, currentIndex]);
+
   useEffect(() => {
-    if (learnerMode !== "id" || readingPrefetchDone.current) return;
-    readingPrefetchDone.current = true;
-    void prefetchJapaneseReadings(SENTENCES_DATA.map((s) => s.japanese));
-  }, [learnerMode]);
+    if (learnerMode !== "id") return;
+    if (prefetchTimer.current) {
+      window.clearTimeout(prefetchTimer.current);
+      prefetchTimer.current = null;
+    }
+    prefetchTimer.current = window.setTimeout(() => {
+      void prefetchJapaneseReadings(nearbyJapaneseTexts);
+    }, 250);
+    return () => {
+      if (prefetchTimer.current) {
+        window.clearTimeout(prefetchTimer.current);
+        prefetchTimer.current = null;
+      }
+    };
+  }, [learnerMode, nearbyJapaneseTexts]);
 
   const handleCardClick = () => {
     if (!isFlipped) {
