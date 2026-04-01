@@ -16,7 +16,7 @@ async function init() {
   // We ship the dict under /kuromoji so builds work reliably.
   await kuroshiro.init(
     new KuromojiAnalyzer({
-      dictPath: "/kuromoji",
+      dictPath: "/kuromoji/",
     }) as any,
   );
 

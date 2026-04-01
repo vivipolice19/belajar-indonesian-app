@@ -79,11 +79,11 @@ export function JapaneseLearnerReading({
       ) : (
         <span
           className={cn(
-            "font-bold text-muted-foreground text-base sm:text-lg",
+            "font-semibold text-muted-foreground text-sm sm:text-base",
             kanaClassName,
           )}
         >
-          よみがな しゅとくしっぱい
+          {original}
         </span>
       )}
 
