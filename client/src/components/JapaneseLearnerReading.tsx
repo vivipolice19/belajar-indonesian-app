@@ -72,18 +72,18 @@ export function JapaneseLearnerReading({
             "font-bold text-muted-foreground animate-pulse select-none",
             kanaClassName,
           )}
-          aria-hidden
+          aria-live="polite"
         >
-          …
+          よみこみちゅう…
         </span>
       ) : (
         <span
           className={cn(
-            "font-bold text-muted-foreground text-xl sm:text-2xl",
+            "font-bold text-muted-foreground text-base sm:text-lg",
             kanaClassName,
           )}
         >
-          —
+          よみがな しゅとくしっぱい
         </span>
       )}
 

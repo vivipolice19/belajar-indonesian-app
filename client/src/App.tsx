@@ -39,7 +39,7 @@ function AppContent() {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="pt-[calc(72px+env(safe-area-inset-top))] pb-20">
+      <main className="pt-[calc(112px+env(safe-area-inset-top))] sm:pt-[calc(104px+env(safe-area-inset-top))] pb-20">
         <MainRouter />
       </main>
       
