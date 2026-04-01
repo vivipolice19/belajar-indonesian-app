@@ -11,6 +11,7 @@ import { WORDS_DATA, SENTENCES_DATA } from "@shared/types";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
+import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
 
 export default function TranslatePage() {
   const [, setLocation] = useLocation();
@@ -87,12 +88,7 @@ export default function TranslatePage() {
   function JapaneseAssistText({ text }: { text: string }) {
     const reading = useJapaneseReading(text, learnerMode === "id");
     if (learnerMode !== "id") return <>{text}</>;
-    return (
-      <span className="inline-flex flex-col gap-1">
-        <span>{reading.kana}</span>
-        <span className="text-xs text-muted-foreground">（{reading.original}）</span>
-      </span>
-    );
+    return <JapaneseLearnerReading reading={reading} kanaClassName="text-base font-medium" />;
   }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {

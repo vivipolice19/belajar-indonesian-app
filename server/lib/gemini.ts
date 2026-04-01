@@ -172,6 +172,7 @@ interface TranslationResult {
 interface JapaneseReadingResult {
   original: string;
   hiragana: string;
+  romaji: string;
 }
 
 export async function advancedTranslate(
@@ -221,28 +222,29 @@ Return a JSON object with this structure:
 }
 
 export async function generateJapaneseReading(text: string): Promise<JapaneseReadingResult> {
-  const systemPrompt = `You are an assistant that converts Japanese text to hiragana for language learners.
+  const systemPrompt = `You are an assistant that converts Japanese text for language learners (hiragana + Hepburn-style romaji).
 Return valid JSON only.`;
 
-  const userPrompt = `Convert this Japanese text to easy-to-read hiragana while preserving punctuation:
+  const userPrompt = `Convert this Japanese text for learners while preserving punctuation:
 "${text}"
 
 Rules:
-- Output full hiragana sentence/phrase in "hiragana"
-- Keep punctuation marks such as 。、！？ and symbols
-- Do not include katakana unless required for proper nouns
-- Keep spacing natural for learners
+- "hiragana": full phrase in hiragana (keep 。、！？ and symbols)
+- "romaji": Hepburn romanization matching the hiragana reading (spaces between words where natural, lowercase with macrons optional: ā ī ū ē ō or plain ascii)
+- Do not include katakana in hiragana unless proper nouns require it
 
 Return JSON:
 {
   "original": "${text}",
-  "hiragana": "..."
+  "hiragana": "...",
+  "romaji": "..."
 }`;
 
   const result = await generateJSON<JapaneseReadingResult>(userPrompt, systemPrompt);
   return {
     original: result.original || text,
     hiragana: result.hiragana || text,
+    romaji: typeof result.romaji === "string" ? result.romaji : "",
   };
 }
 

@@ -10,6 +10,7 @@ import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { cn } from "@/lib/utils";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
+import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
 
 type QuizMode = "words" | "sentences";
 type Question = QuizQuestion | SentenceQuizQuestion;
@@ -234,14 +235,29 @@ function generateDirectionalSentenceQuestion(direction: "ja" | "id"): Directiona
   };
 }
 
-function JapaneseAssistText({ text, enabled }: { text: string; enabled: boolean }) {
+function JapaneseAssistText({
+  text,
+  enabled,
+  align = "center",
+  kanaClassName,
+}: {
+  text: string;
+  enabled: boolean;
+  align?: "center" | "start";
+  kanaClassName?: string;
+}) {
   const reading = useJapaneseReading(text, enabled);
   if (!enabled) return <>{text}</>;
+  const defaultKana =
+    align === "start"
+      ? "text-lg font-semibold text-left w-full"
+      : "text-2xl font-bold text-center leading-relaxed";
   return (
-    <span className="inline-flex flex-col items-center gap-1">
-      <span>{reading.kana}</span>
-      <span className="text-sm text-muted-foreground">（{reading.original}）</span>
-    </span>
+    <JapaneseLearnerReading
+      reading={reading}
+      kanaClassName={kanaClassName ?? defaultKana}
+      wrapperClassName={align === "start" ? "items-start text-left w-full" : undefined}
+    />
   );
 }
 
@@ -466,12 +482,17 @@ export default function QuizPage() {
             <p className="text-sm text-muted-foreground mb-2">
               {questionLabel}
             </p>
-            <p className={cn(
-              "font-bold text-foreground text-center",
-              mode === "words" ? "text-3xl" : "text-2xl leading-relaxed"
-            )} data-testid="text-quiz-question">
-              <JapaneseAssistText text={questionText} enabled={isJapanesePrompt} />
-            </p>
+            <div className="text-foreground text-center" data-testid="text-quiz-question">
+              <JapaneseAssistText
+                text={questionText}
+                enabled={isJapanesePrompt}
+                kanaClassName={
+                  mode === "words"
+                    ? "text-3xl font-bold text-center"
+                    : "text-2xl font-bold text-center leading-relaxed"
+                }
+              />
+            </div>
           </div>
           
           <div className="flex justify-center pt-2">
@@ -510,10 +531,7 @@ export default function QuizPage() {
               data-testid={`button-answer-${index}`}
             >
               <span className="flex-1 text-left">
-                <JapaneseAssistText
-                  text={option}
-                  enabled={learnerMode === "id" && directionalQuestion.speakLang === "id-ID"}
-                />
+                <JapaneseAssistText text={option} enabled={false} align="start" />
               </span>
               {showResult && isCorrect && (
                 <CheckCircle2 className="w-5 h-5 text-success ml-2" />

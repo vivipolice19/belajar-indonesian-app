@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
+import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
 
 export default function WordCardsPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -95,7 +96,9 @@ export default function WordCardsPage() {
   return (
     <div className="p-4 space-y-6" data-testid="page-cards">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">単語カード</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {learnerMode === "ja" ? "単語カード" : "Kartu kosakata"}
+        </h1>
         <div className="flex items-center justify-center gap-2">
           {currentWord.category && (
             <Badge variant="outline" data-testid="badge-category">
@@ -104,7 +107,9 @@ export default function WordCardsPage() {
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          全{WORDS_DATA.length}語からランダム出題・無限ループ
+          {learnerMode === "ja"
+            ? `全${WORDS_DATA.length}語からランダム出題・無限ループ`
+            : `${WORDS_DATA.length} kosakata • acak • tanpa batas`}
         </p>
       </div>
 
@@ -117,33 +122,37 @@ export default function WordCardsPage() {
           <CardContent className="p-8 flex flex-col items-center justify-center min-h-[320px] relative">
             {!isFlipped ? (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-2 w-full">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    {learnerMode === "ja" ? "インドネシア語" : "日本語"}
+                    {learnerMode === "ja" ? "インドネシア語" : "Bahasa Jepang"}
                   </p>
-                  <p
-                    className="text-4xl font-bold text-foreground"
-                    data-testid={learnerMode === "ja" ? "text-indonesian" : "text-japanese"}
-                  >
-                    {learnerMode === "ja" ? currentWord.indonesian : jpReading.kana}
-                  </p>
-                  {learnerMode === "id" && (
-                    <p className="text-sm text-muted-foreground">
-                      （{jpReading.original}）
+                  {learnerMode === "ja" ? (
+                    <p
+                      className="text-4xl font-bold text-foreground"
+                      data-testid="text-indonesian"
+                    >
+                      {currentWord.indonesian}
                     </p>
+                  ) : (
+                    <div data-testid="text-japanese">
+                      <JapaneseLearnerReading
+                        reading={jpReading}
+                        kanaClassName="text-4xl text-foreground"
+                      />
+                    </div>
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground text-center">
                   {learnerMode === "ja"
                     ? "カードをタップして日本語の意味を表示"
-                    : "カードをタップしてインドネシア語を表示"}
+                    : "Ketuk kartu untuk menampilkan bahasa Indonesia"}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center space-y-6 w-full">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                    {learnerMode === "ja" ? "日本語の意味" : "インドネシア語"}
+                    {learnerMode === "ja" ? "日本語の意味" : "Bahasa Indonesia"}
                   </p>
                   <p
                     className="text-3xl font-bold text-primary"
@@ -152,10 +161,19 @@ export default function WordCardsPage() {
                     {learnerMode === "ja" ? currentWord.japanese : currentWord.indonesian}
                   </p>
                 </div>
-                <div className="text-center space-y-1">
-                  <p className="text-lg text-muted-foreground">
-                    {learnerMode === "ja" ? currentWord.indonesian : `${jpReading.kana}（${jpReading.original}）`}
-                  </p>
+                <div className="text-center space-y-1 w-full">
+                  {learnerMode === "ja" ? (
+                    <p className="text-lg text-muted-foreground">{currentWord.indonesian}</p>
+                  ) : (
+                    <div className="text-lg text-muted-foreground space-y-0.5">
+                      {jpReading.romaji ? (
+                        <p className="text-xs tracking-wide">{jpReading.romaji}</p>
+                      ) : null}
+                      <p>
+                        {jpReading.kana}（{jpReading.original}）
+                      </p>
+                    </div>
+                  )}
                   {currentWord.category && (
                     <p className="text-xs text-muted-foreground">
                       ({currentWord.category})
@@ -163,7 +181,7 @@ export default function WordCardsPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  カードをタップして戻る
+                  {learnerMode === "ja" ? "カードをタップして戻る" : "Ketuk kartu untuk kembali"}
                 </p>
               </div>
             )}

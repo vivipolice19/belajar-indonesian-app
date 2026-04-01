@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
-type ReadingCache = Record<string, string>;
-const CACHE_KEY = "belajar_japanese_reading_cache_v1";
+type CachedEntry = { hiragana: string; romaji: string };
+type ReadingCache = Record<string, CachedEntry>;
+const CACHE_KEY = "belajar_japanese_reading_cache_v2";
 
 function toHiraganaLoose(text: string): string {
   return text.replace(/[\u30a1-\u30f6]/g, (ch) =>
@@ -15,7 +16,7 @@ function readCache(): ReadingCache {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") return parsed;
+    if (parsed && typeof parsed === "object") return parsed as ReadingCache;
   } catch {
     // ignore
   }
@@ -32,17 +33,20 @@ function writeCache(cache: ReadingCache) {
 
 export function useJapaneseReading(text: string, enabled: boolean) {
   const [hiragana, setHiragana] = useState<string>(() => toHiraganaLoose(text));
+  const [romaji, setRomaji] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!enabled || !text) {
       setHiragana(toHiraganaLoose(text));
+      setRomaji("");
       return;
     }
 
     const cache = readCache();
     if (cache[text]) {
-      setHiragana(cache[text]);
+      setHiragana(cache[text].hiragana);
+      setRomaji(cache[text].romaji || "");
       return;
     }
 
@@ -52,14 +56,20 @@ export function useJapaneseReading(text: string, enabled: boolean) {
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return;
-        const next = typeof data?.hiragana === "string" ? data.hiragana : toHiraganaLoose(text);
-        setHiragana(next);
+        const nextH =
+          typeof data?.hiragana === "string" ? data.hiragana : toHiraganaLoose(text);
+        const nextR = typeof data?.romaji === "string" ? data.romaji : "";
+        setHiragana(nextH);
+        setRomaji(nextR);
         const current = readCache();
-        current[text] = next;
+        current[text] = { hiragana: nextH, romaji: nextR };
         writeCache(current);
       })
       .catch(() => {
-        if (!cancelled) setHiragana(toHiraganaLoose(text));
+        if (!cancelled) {
+          setHiragana(toHiraganaLoose(text));
+          setRomaji("");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -70,15 +80,13 @@ export function useJapaneseReading(text: string, enabled: boolean) {
     };
   }, [enabled, text]);
 
-  const display = useMemo(
+  return useMemo(
     () => ({
       kana: hiragana,
+      romaji,
       original: text,
       loading,
     }),
-    [hiragana, text, loading]
+    [hiragana, romaji, text, loading]
   );
-
-  return display;
 }
-

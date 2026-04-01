@@ -12,6 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
+import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
 
 interface TranslationResult {
   indonesian: string;
@@ -106,12 +107,7 @@ export default function AdvancedTranslatePage() {
   function JapaneseAssistText({ text }: { text: string }) {
     const reading = useJapaneseReading(text, learnerMode === "id");
     if (learnerMode !== "id") return <>{text}</>;
-    return (
-      <span className="inline-flex flex-col gap-1">
-        <span>{reading.kana}</span>
-        <span className="text-sm text-muted-foreground">（{reading.original}）</span>
-      </span>
-    );
+    return <JapaneseLearnerReading reading={reading} kanaClassName="text-xl font-semibold text-primary" />;
   }
 
   return (

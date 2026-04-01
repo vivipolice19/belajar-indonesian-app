@@ -10,24 +10,30 @@ export default function HomePage() {
 
   const aiCards = [
     {
-      title: "AI無限単語カード",
-      description: "AIが無限に新しい単語を生成",
+      titleJa: "AI無限単語カード",
+      titleId: "Kartu kosakata AI (tanpa batas)",
+      descriptionJa: "AIが無限に新しい単語を生成",
+      descriptionId: "AI membuat kosakata baru tanpa henti",
       icon: Sparkles,
       path: "/ai-cards",
       color: "bg-gradient-to-br from-purple-500/10 to-pink-500/10",
       iconColor: "text-purple-600 dark:text-purple-400",
     },
     {
-      title: "AI無限文章学習",
-      description: "シチュエーション別に文章を自動生成",
+      titleJa: "AI無限文章学習",
+      titleId: "Belajar kalimat AI (tanpa batas)",
+      descriptionJa: "シチュエーション別に文章を自動生成",
+      descriptionId: "AI membuat kalimat sesuai situasi",
       icon: MessageSquare,
       path: "/ai-sentences",
       color: "bg-gradient-to-br from-blue-500/10 to-cyan-500/10",
       iconColor: "text-blue-600 dark:text-blue-400",
     },
     {
-      title: "AI高度翻訳",
-      description: "文法解説・用例付きの本格翻訳",
+      titleJa: "AI高度翻訳",
+      titleId: "Terjemahan AI tingkat lanjut",
+      descriptionJa: "文法解説・用例付きの本格翻訳",
+      descriptionId: "Terjemahan dengan penjelasan tata bahasa & contoh",
       icon: Languages,
       path: "/ai-translate",
       color: "bg-gradient-to-br from-green-500/10 to-emerald-500/10",
@@ -37,30 +43,39 @@ export default function HomePage() {
 
   const actionCards = [
     {
-      title: "単語カード練習",
-      description: "基本150語をフラッシュカードで学習",
+      titleJa: "単語カード練習",
+      titleId: "Latihan kartu kosakata",
+      descriptionJa: "基本150語をフラッシュカードで学習",
+      descriptionId: "150 kosakata dasar dengan kartu kilat",
       icon: BookOpen,
       path: "/cards",
       color: "bg-chart-3/10 hover:bg-chart-3/20",
       iconColor: "text-chart-3",
     },
     {
-      title: "クイズに挑戦",
-      description: "4択クイズで理解度チェック",
+      titleJa: "クイズに挑戦",
+      titleId: "Kuis pilihan ganda",
+      descriptionJa: "4択クイズで理解度チェック",
+      descriptionId: "Cek pemahaman dengan kuis 4 pilihan",
       icon: Brain,
       path: "/quiz",
       color: "bg-chart-2/10 hover:bg-chart-2/20",
       iconColor: "text-chart-2",
     },
     {
-      title: "学習ゲーム",
-      description: "タイピング・マッチングゲームで楽しく学習",
+      titleJa: "学習ゲーム",
+      titleId: "Game belajar",
+      descriptionJa: "タイピング・マッチングゲームで楽しく学習",
+      descriptionId: "Belajar dengan mengetik & mencocokkan",
       icon: Gamepad2,
       path: "/game",
       color: "bg-chart-4/10 hover:bg-chart-4/20",
       iconColor: "text-chart-4",
     },
   ];
+
+  const aiSectionTitle = mode === "ja" ? "AI学習（無限コンテンツ）" : "Belajar AI (konten tak terbatas)";
+  const basicSectionTitle = mode === "ja" ? "基本学習" : "Belajar dasar";
 
   return (
     <div className="p-4 space-y-6" data-testid="page-home">
@@ -79,18 +94,18 @@ export default function HomePage() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 px-1">
           <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-          <h2 className="text-lg font-bold text-foreground">
-            AI学習（無限コンテンツ）
-          </h2>
+          <h2 className="text-lg font-bold text-foreground">{aiSectionTitle}</h2>
         </div>
         {aiCards.map((card) => {
           const Icon = card.icon;
+          const title = mode === "ja" ? card.titleJa : card.titleId;
+          const description = mode === "ja" ? card.descriptionJa : card.descriptionId;
           return (
             <Card
               key={card.path}
               className={`cursor-pointer transition-all hover-elevate active-elevate-2 ${card.color}`}
               onClick={() => setLocation(card.path)}
-              data-testid={`card-ai-${card.title}`}
+              data-testid={`card-ai-${card.path}`}
             >
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
@@ -98,12 +113,8 @@ export default function HomePage() {
                     <Icon className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-foreground">
-                      {card.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {card.description}
-                    </p>
+                    <h3 className="font-bold text-foreground">{title}</h3>
+                    <p className="text-sm text-muted-foreground">{description}</p>
                   </div>
                 </div>
               </CardContent>
@@ -113,17 +124,17 @@ export default function HomePage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground px-1">
-          基本学習
-        </h2>
+        <h2 className="text-lg font-bold text-foreground px-1">{basicSectionTitle}</h2>
         {actionCards.map((card) => {
           const Icon = card.icon;
+          const title = mode === "ja" ? card.titleJa : card.titleId;
+          const description = mode === "ja" ? card.descriptionJa : card.descriptionId;
           return (
             <Card
               key={card.path}
               className={`cursor-pointer transition-all hover-elevate active-elevate-2 ${card.color}`}
               onClick={() => setLocation(card.path)}
-              data-testid={`card-action-${card.title}`}
+              data-testid={`card-action-${card.path}`}
             >
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
@@ -131,12 +142,8 @@ export default function HomePage() {
                     <Icon className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-foreground">
-                      {card.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {card.description}
-                    </p>
+                    <h3 className="font-bold text-foreground">{title}</h3>
+                    <p className="text-sm text-muted-foreground">{description}</p>
                   </div>
                 </div>
               </CardContent>
