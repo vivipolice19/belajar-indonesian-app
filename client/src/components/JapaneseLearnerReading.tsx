@@ -13,6 +13,7 @@ type Props = {
   kanaClassName?: string;
   romajiClassName?: string;
   wrapperClassName?: string;
+  /** Show kanji line below hiragana when applicable (reference) */
   showOriginal?: boolean;
 };
 
@@ -22,7 +23,10 @@ function norm(s: string) {
   return s.replace(/\s+/g, "").trim();
 }
 
-/** Hiragana main line, romaji above, optional kanji in parentheses when distinct from kana */
+/**
+ * Stack: [romaji furigana] → [hiragana MAIN] → [kanji reference below]
+ * Never uses kanji as the large main line — only hiragana (or loading placeholder).
+ */
 export function JapaneseLearnerReading({
   reading,
   kanaClassName,
@@ -30,40 +34,66 @@ export function JapaneseLearnerReading({
   wrapperClassName,
   showOriginal = true,
 }: Props) {
-  const { mainText, showParen } = useMemo(() => {
-    const kana = reading.kana || "";
-    const original = reading.original || "";
-    const kanaHasHan = HAN.test(kana);
-    const dup =
-      kana === original || (norm(kana) === norm(original) && norm(original).length > 0);
-    if (kanaHasHan) {
-      return { mainText: original || kana, showParen: false };
-    }
-    if (dup) {
-      return { mainText: kana || original, showParen: false };
-    }
-    return {
-      mainText: kana || original,
-      showParen: Boolean(showOriginal && original.trim()),
-    };
-  }, [reading.kana, reading.original, showOriginal]);
+  const kana = reading.kana || "";
+  const original = reading.original || "";
+
+  const { hiraganaOk, showKanjiRef } = useMemo(() => {
+    const ok = kana.trim().length > 0 && !HAN.test(kana);
+    const originalHasKanji = HAN.test(original);
+    const sameSurface = ok && norm(kana) === norm(original) && !originalHasKanji;
+    const ref =
+      showOriginal &&
+      original.trim() &&
+      !sameSurface &&
+      (originalHasKanji || (ok && norm(kana) !== norm(original)));
+    return { hiraganaOk: ok, showKanjiRef: Boolean(ref) };
+  }, [kana, original, showOriginal]);
 
   return (
-    <div className={cn("flex flex-col items-center gap-0.5 text-center", wrapperClassName)}>
+    <div className={cn("flex flex-col items-center gap-1 text-center", wrapperClassName)}>
+      {/* ローマ字（フリガナ風・上） */}
       {reading.romaji ? (
         <span
           className={cn(
-            "text-base sm:text-lg leading-snug text-muted-foreground tracking-wide font-semibold",
+            "text-sm sm:text-base leading-tight text-muted-foreground tracking-wide font-semibold",
             romajiClassName,
           )}
         >
           {reading.romaji}
         </span>
       ) : null}
-      <span className={cn("font-bold", kanaClassName)}>{mainText}</span>
-      {showParen ? (
-        <span className="text-sm sm:text-base text-muted-foreground font-normal">
-          （{reading.original}）
+
+      {/* ひらがな（本文・最大）— 漢字はここに出さない */}
+      {hiraganaOk ? (
+        <span className={cn("font-bold text-foreground", kanaClassName)}>{kana}</span>
+      ) : reading.loading ? (
+        <span
+          className={cn(
+            "font-bold text-muted-foreground animate-pulse select-none",
+            kanaClassName,
+          )}
+          aria-hidden
+        >
+          …
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "font-bold text-muted-foreground text-xl sm:text-2xl",
+            kanaClassName,
+          )}
+        >
+          —
+        </span>
+      )}
+
+      {/* 漢字は参考としてのみ（下・小さめ） */}
+      {showKanjiRef ? (
+        <span
+          className="mt-1.5 text-sm sm:text-base text-muted-foreground font-normal tracking-wide"
+          data-testid="kanji-reference"
+        >
+          {original}
         </span>
       ) : null}
     </div>
