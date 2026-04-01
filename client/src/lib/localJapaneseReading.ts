@@ -13,10 +13,10 @@ async function init() {
 
   const kuroshiro = new Kuroshiro();
   // This loads kuromoji dictionary in the browser (first time only).
+  // We ship the dict under /kuromoji so builds work reliably.
   await kuroshiro.init(
     new KuromojiAnalyzer({
-      // Use the CDN-free built-in path; analyzer will fetch dict from its package assets.
-      // If hosting blocks these assets, API fallback will still work.
+      dictPath: "/kuromoji",
     }) as any,
   );
 

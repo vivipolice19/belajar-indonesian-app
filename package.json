@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "node scripts/run-dev.mjs",
+    "postinstall": "node scripts/copy-kuromoji-dict.mjs",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "node scripts/run-start.mjs",
     "check": "tsc",
