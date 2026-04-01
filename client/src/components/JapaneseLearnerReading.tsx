@@ -53,7 +53,7 @@ export function JapaneseLearnerReading({
       {reading.romaji ? (
         <span
           className={cn(
-            "text-sm sm:text-base leading-snug text-muted-foreground tracking-wide font-medium",
+            "text-base sm:text-lg leading-snug text-muted-foreground tracking-wide font-semibold",
             romajiClassName,
           )}
         >
@@ -62,7 +62,9 @@ export function JapaneseLearnerReading({
       ) : null}
       <span className={cn("font-bold", kanaClassName)}>{mainText}</span>
       {showParen ? (
-        <span className="text-base text-muted-foreground">（{reading.original}）</span>
+        <span className="text-sm sm:text-base text-muted-foreground font-normal">
+          （{reading.original}）
+        </span>
       ) : null}
     </div>
   );

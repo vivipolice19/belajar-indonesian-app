@@ -31,7 +31,8 @@ function getApiKey(): string {
 
 async function generateJSON<T = any>(
   prompt: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  options?: { maxOutputTokens?: number },
 ): Promise<T> {
   const apiKey = getApiKey();
   const url = `${GEMINI_API_URL}/${DEFAULT_MODEL}:generateContent?key=${apiKey}`;
@@ -63,7 +64,7 @@ async function generateJSON<T = any>(
           contents,
           generationConfig: {
             responseMimeType: "application/json",
-            maxOutputTokens: 4000,
+            maxOutputTokens: options?.maxOutputTokens ?? 4000,
           },
         }),
       });
@@ -370,6 +371,65 @@ Return JSON:
     hiragana: hiragana || text,
     romaji: typeof result.romaji === "string" ? result.romaji : "",
   };
+}
+
+/** One Gemini call for many phrases — use for static vocabulary prefetch (reduces API usage). Max 30. */
+export async function generateJapaneseReadingsBatch(
+  texts: string[],
+): Promise<Record<string, { hiragana: string; romaji: string }>> {
+  const unique = [...new Set(texts.map((t) => t.trim()).filter(Boolean))];
+  if (!unique.length) return {};
+  if (unique.length > 30) {
+    throw new Error("batch size must be <= 30");
+  }
+
+  const systemPrompt = `You convert Japanese phrases to hiragana and Hepburn romaji for language learners.
+Output valid JSON only. No markdown.
+CRITICAL: every "hiragana" value must contain ZERO kanji — rewrite all kanji as hiragana.`;
+
+  const list = unique.map((t, i) => `${i + 1}. ${JSON.stringify(t)}`).join("\n");
+  const userPrompt = `Convert EACH phrase below. Preserve 。、！？ and digits. Romaji: Hepburn, ascii, spaces between words.
+
+Phrases:
+${list}
+
+Return JSON:
+{
+  "items": [
+    { "original": <exact string>, "hiragana": "hiragana only", "romaji": "romaji" }
+  ]
+}
+The "items" array MUST have exactly ${unique.length} objects in the SAME ORDER as the numbered list above.`;
+
+  const result = await generateJSON<{
+    items: Array<{ original?: string; hiragana?: string; romaji?: string }>;
+  }>(userPrompt, systemPrompt, { maxOutputTokens: 8192 });
+
+  const out: Record<string, { hiragana: string; romaji: string }> = {};
+  const items = result.items || [];
+
+  for (let i = 0; i < unique.length; i++) {
+    const orig = unique[i];
+    const row = items[i];
+    if (row && typeof row.hiragana === "string" && row.hiragana.trim()) {
+      out[orig] = {
+        hiragana: row.hiragana,
+        romaji: typeof row.romaji === "string" ? row.romaji : "",
+      };
+    }
+  }
+
+  for (const row of items) {
+    const o = typeof row?.original === "string" ? row.original : "";
+    if (o && unique.includes(o) && typeof row.hiragana === "string" && row.hiragana.trim() && !out[o]) {
+      out[o] = {
+        hiragana: row.hiragana,
+        romaji: typeof row.romaji === "string" ? row.romaji : "",
+      };
+    }
+  }
+
+  return out;
 }
 
 export async function testGeminiConnection(): Promise<{ success: boolean; error?: string }> {

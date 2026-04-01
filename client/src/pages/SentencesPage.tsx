@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +10,13 @@ import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
+import { prefetchJapaneseReadings } from "@/lib/prefetchJapaneseReadings";
 
 export default function SentencesPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [shuffledSentences, setShuffledSentences] = useState([...SENTENCES_DATA]);
+  const readingPrefetchDone = useRef(false);
   const { progress, markSentenceLearned, markSentencePronounced } = useGameProgress();
   const { toast } = useToast();
   const { mode: learnerMode } = useLearner();
@@ -25,6 +27,12 @@ export default function SentencesPage() {
   useEffect(() => {
     setShuffledSentences([...SENTENCES_DATA].sort(() => Math.random() - 0.5));
   }, []);
+
+  useEffect(() => {
+    if (learnerMode !== "id" || readingPrefetchDone.current) return;
+    readingPrefetchDone.current = true;
+    void prefetchJapaneseReadings(SENTENCES_DATA.map((s) => s.japanese));
+  }, [learnerMode]);
 
   const handleCardClick = () => {
     if (!isFlipped) {
@@ -115,7 +123,7 @@ export default function SentencesPage() {
 
       <div className="flex justify-center px-4">
         <Card
-          className="w-full max-w-md min-h-[320px] cursor-pointer transition-all duration-200 hover-elevate active:scale-95"
+          className="w-full max-w-md min-h-[320px] cursor-pointer transition-transform duration-75 ease-out hover-elevate active:scale-[0.99]"
           onClick={handleCardClick}
           data-testid="card-sentence"
         >
@@ -165,13 +173,11 @@ export default function SentencesPage() {
                   {learnerMode === "ja" ? (
                     <p className="text-base text-muted-foreground">{currentSentence.indonesian}</p>
                   ) : (
-                    <div className="text-base text-muted-foreground space-y-0.5">
-                      {jpReading.romaji ? (
-                        <p className="text-xs tracking-wide">{jpReading.romaji}</p>
-                      ) : null}
-                      <p className="leading-relaxed">
-                        {jpReading.kana}（{jpReading.original}）
-                      </p>
+                    <div className="w-full flex justify-center px-1">
+                      <JapaneseLearnerReading
+                        reading={jpReading}
+                        kanaClassName="text-xl font-semibold text-primary leading-relaxed"
+                      />
                     </div>
                   )}
                   {currentSentence.category && (

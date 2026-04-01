@@ -9,6 +9,7 @@ import {
   advancedTranslate,
   testGeminiConnection,
   generateJapaneseReading,
+  generateJapaneseReadingsBatch,
 } from "./lib/gemini";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -128,6 +129,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         messageJa: "翻訳に失敗しました。もう一度お試しください。",
         messageId: "Terjemahan gagal. Coba lagi.",
+      });
+    }
+  });
+
+  // Batch readings for static vocabulary / sentences (fewer round-trips than per-word)
+  app.post("/api/japanese/readings/batch", async (req, res) => {
+    try {
+      const { texts } = req.body;
+      if (!Array.isArray(texts) || texts.length === 0) {
+        return res.status(400).json({ error: "texts must be a non-empty array" });
+      }
+      const slice = texts
+        .slice(0, 30)
+        .map((t: unknown) => String(t).trim())
+        .filter(Boolean);
+      const readings = await generateJapaneseReadingsBatch(slice);
+      res.json({ readings });
+    } catch (error: any) {
+      console.error("Japanese batch reading error:", error);
+      const errorMsg = error?.message || "";
+      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+        return res.status(429).json(aiLimit);
+      }
+      if (errorMsg.includes("GEMINI_API_KEY")) {
+        return res.status(503).json({
+          messageJa: "サーバーに GEMINI_API_KEY が設定されていません。",
+          messageId: "GEMINI_API_KEY belum disetel di server.",
+        });
+      }
+      res.status(500).json({
+        messageJa: "読み仮名の一括生成に失敗しました。",
+        messageId: "Gagal memuat bacaan (batch). Coba lagi.",
       });
     }
   });

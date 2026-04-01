@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +10,13 @@ import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
 import { JapaneseLearnerReading } from "@/components/JapaneseLearnerReading";
+import { prefetchJapaneseReadings } from "@/lib/prefetchJapaneseReadings";
 
 export default function WordCardsPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [shuffledWords, setShuffledWords] = useState([...WORDS_DATA]);
+  const readingPrefetchDone = useRef(false);
   const { progress, markWordLearned, markWordPronounced } = useGameProgress();
   const { toast } = useToast();
   const { mode: learnerMode } = useLearner();
@@ -25,6 +27,12 @@ export default function WordCardsPage() {
   useEffect(() => {
     setShuffledWords([...WORDS_DATA].sort(() => Math.random() - 0.5));
   }, []);
+
+  useEffect(() => {
+    if (learnerMode !== "id" || readingPrefetchDone.current) return;
+    readingPrefetchDone.current = true;
+    void prefetchJapaneseReadings(WORDS_DATA.map((w) => w.japanese));
+  }, [learnerMode]);
 
   const handleCardClick = () => {
     if (!isFlipped) {
@@ -115,7 +123,7 @@ export default function WordCardsPage() {
 
       <div className="flex justify-center px-4">
         <Card
-          className="w-full max-w-md min-h-[320px] cursor-pointer transition-all duration-200 hover-elevate active:scale-95"
+          className="w-full max-w-md min-h-[320px] cursor-pointer transition-transform duration-75 ease-out hover-elevate active:scale-[0.99]"
           onClick={handleCardClick}
           data-testid="card-flashcard"
         >
@@ -165,13 +173,11 @@ export default function WordCardsPage() {
                   {learnerMode === "ja" ? (
                     <p className="text-lg text-muted-foreground">{currentWord.indonesian}</p>
                   ) : (
-                    <div className="text-lg text-muted-foreground space-y-0.5">
-                      {jpReading.romaji ? (
-                        <p className="text-sm sm:text-base tracking-wide font-medium">{jpReading.romaji}</p>
-                      ) : null}
-                      <p>
-                        {jpReading.kana}（{jpReading.original}）
-                      </p>
+                    <div className="w-full flex justify-center px-1">
+                      <JapaneseLearnerReading
+                        reading={jpReading}
+                        kanaClassName="text-2xl font-semibold text-primary leading-snug"
+                      />
                     </div>
                   )}
                   {currentWord.category && (
