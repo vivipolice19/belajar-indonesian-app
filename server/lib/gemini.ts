@@ -3,22 +3,30 @@ import pRetry from "p-retry";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
+/** CJK Unified Ideographs — if hiragana output still contains these, re-prompt */
+const HAN_REGEX = /[\u4e00-\u9fff]/;
+
+function extractJsonText(raw: string): string {
+  const t = raw.trim();
+  const fence = /^```(?:json)?\s*([\s\S]*?)```$/im.exec(t);
+  if (fence) return fence[1].trim();
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start >= 0 && end > start) return t.slice(start, end + 1);
+  return t;
+}
+
+function parseGeminiJson<T>(raw: string): T {
+  const extracted = extractJsonText(raw);
+  return JSON.parse(extracted) as T;
+}
+
 function getApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     throw new Error("GEMINI_API_KEY is not configured");
   }
   return key;
-}
-
-function isRateLimitError(error: any): boolean {
-  const errorMsg = error?.message || String(error);
-  return (
-    errorMsg.includes("429") ||
-    errorMsg.includes("RESOURCE_EXHAUSTED") ||
-    errorMsg.toLowerCase().includes("quota") ||
-    errorMsg.toLowerCase().includes("rate limit")
-  );
 }
 
 async function generateJSON<T = any>(
@@ -66,19 +74,33 @@ async function generateJSON<T = any>(
       }
 
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      return JSON.parse(text);
+      if (!data.candidates?.length) {
+        const fb = data.promptFeedback || data.error || data;
+        throw new Error(`Gemini returned no candidates: ${JSON.stringify(fb)}`);
+      }
+      const c0 = data.candidates[0];
+      const reason = c0.finishReason;
+      if (
+        reason === "SAFETY" ||
+        reason === "RECITATION" ||
+        reason === "BLOCKLIST" ||
+        reason === "PROHIBITED_CONTENT" ||
+        reason === "SPII"
+      ) {
+        throw new Error(`Gemini finishReason: ${reason}`);
+      }
+      const part = c0?.content?.parts?.[0];
+      const text = typeof part?.text === "string" ? part.text : "";
+      if (!text.trim()) {
+        throw new Error("Gemini returned empty text");
+      }
+      return parseGeminiJson<T>(text);
     },
     {
-      retries: 3,
-      minTimeout: 1000,
-      maxTimeout: 10000,
+      retries: 4,
+      minTimeout: 800,
+      maxTimeout: 12000,
       factor: 2,
-      onFailedAttempt: (error) => {
-        if (!isRateLimitError(error)) {
-          throw error;
-        }
-      },
     }
   );
 
@@ -93,15 +115,19 @@ interface VocabularyWord {
   pronunciation_guide?: string;
 }
 
+export type LearnerMode = "ja" | "id";
+
 export async function generateVocabulary(
   theme: string,
   difficulty: number,
-  count: number = 10
+  count: number = 10,
+  learnerMode: LearnerMode = "ja"
 ): Promise<VocabularyWord[]> {
-  const systemPrompt = `You are an expert Indonesian language teacher creating vocabulary for Japanese learners. 
-Always respond with valid JSON only.`;
+  if (learnerMode === "ja") {
+    const systemPrompt = `You are an expert Indonesian language teacher creating vocabulary for Japanese native speakers learning Indonesian.
+Always respond with valid JSON only. No markdown fences.`;
 
-  const userPrompt = `Generate ${count} Indonesian vocabulary words for the theme "${theme}" at difficulty level ${difficulty}/10.
+    const userPrompt = `Generate ${count} Indonesian vocabulary words for the theme "${theme}" at difficulty level ${difficulty}/10.
 Include words that are useful for daily conversation.
 
 Return a JSON object with this structure:
@@ -109,16 +135,43 @@ Return a JSON object with this structure:
   "words": [
     {
       "indonesian": "word in Indonesian",
-      "japanese": "word meaning in Japanese",
+      "japanese": "meaning or gloss in Japanese",
       "category": "${theme}",
       "difficulty": ${difficulty},
-      "pronunciation_guide": "pronunciation tips in Japanese if needed"
+      "pronunciation_guide": "short pronunciation tips in Japanese for the Indonesian word"
+    }
+  ]
+}`;
+
+    const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt);
+    const words = result.words || [];
+    if (!words.length) throw new Error("Empty vocabulary result");
+    return words;
+  }
+
+  const systemPrompt = `You are an expert Japanese language teacher for Indonesian speakers learning Japanese.
+Always respond with valid JSON only. No markdown fences.`;
+
+  const userPrompt = `Generate ${count} Japanese vocabulary items for the theme "${theme}" (theme name may be in Japanese) at difficulty level ${difficulty}/10.
+Use natural Japanese including kanji when appropriate for the level. Indonesian gloss must be clear.
+
+Return a JSON object with this structure:
+{
+  "words": [
+    {
+      "japanese": "Japanese word or phrase (kanji ok)",
+      "indonesian": "clear Indonesian meaning or gloss",
+      "category": "${theme}",
+      "difficulty": ${difficulty},
+      "pronunciation_guide": "reading help in INDONESIAN only (e.g. romaji or how to read); do NOT write Japanese prose here"
     }
   ]
 }`;
 
   const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt);
-  return result.words || [];
+  const words = result.words || [];
+  if (!words.length) throw new Error("Empty vocabulary result");
+  return words;
 }
 
 interface SentenceData {
@@ -132,12 +185,14 @@ interface SentenceData {
 export async function generateSentences(
   situation: string,
   difficulty: number,
-  count: number = 5
+  count: number = 5,
+  learnerMode: LearnerMode = "ja"
 ): Promise<SentenceData[]> {
-  const systemPrompt = `You are an expert Indonesian language teacher creating practical sentences for Japanese learners.
-Always respond with valid JSON only.`;
+  if (learnerMode === "ja") {
+    const systemPrompt = `You are an expert Indonesian language teacher creating practical sentences for Japanese native speakers learning Indonesian.
+Always respond with valid JSON only. No markdown fences.`;
 
-  const userPrompt = `Generate ${count} Indonesian sentences for the situation "${situation}" at difficulty level ${difficulty}/10.
+    const userPrompt = `Generate ${count} Indonesian sentences for the situation "${situation}" at difficulty level ${difficulty}/10.
 Focus on natural, everyday conversation.
 
 Return a JSON object with this structure:
@@ -145,16 +200,43 @@ Return a JSON object with this structure:
   "sentences": [
     {
       "indonesian": "sentence in Indonesian",
-      "japanese": "sentence in Japanese",
+      "japanese": "natural Japanese translation",
       "category": "${situation}",
       "difficulty": ${difficulty},
-      "context": "when to use this sentence"
+      "context": "when to use this sentence (can be in Japanese)"
+    }
+  ]
+}`;
+
+    const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt);
+    const sentences = result.sentences || [];
+    if (!sentences.length) throw new Error("Empty sentences result");
+    return sentences;
+  }
+
+  const systemPrompt = `You are an expert Japanese language teacher for Indonesian speakers learning Japanese.
+Always respond with valid JSON only. No markdown fences.`;
+
+  const userPrompt = `Generate ${count} Japanese sentences for the situation "${situation}" at difficulty level ${difficulty}/10.
+Sentences must be natural Japanese (kanji where appropriate). Provide accurate Indonesian translation/gloss.
+
+Return a JSON object with this structure:
+{
+  "sentences": [
+    {
+      "japanese": "sentence in Japanese",
+      "indonesian": "natural Indonesian meaning or translation",
+      "category": "${situation}",
+      "difficulty": ${difficulty},
+      "context": "when to use (in INDONESIAN only)"
     }
   ]
 }`;
 
   const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt);
-  return result.sentences || [];
+  const sentences = result.sentences || [];
+  if (!sentences.length) throw new Error("Empty sentences result");
+  return sentences;
 }
 
 interface TranslationResult {
@@ -177,73 +259,115 @@ interface JapaneseReadingResult {
 
 export async function advancedTranslate(
   text: string,
-  sourceLanguage: "japanese" | "indonesian"
+  sourceLanguage: "japanese" | "indonesian",
+  learnerMode: LearnerMode = "ja"
 ): Promise<TranslationResult> {
   const systemPrompt = `You are an expert language teacher specializing in Japanese-Indonesian translation.
-Provide detailed explanations suitable for learners. Always respond with valid JSON only.`;
+Provide detailed explanations suitable for learners. Always respond with valid JSON only. No markdown fences.
+grammar_explanation and pronunciation_guide MUST follow the language rules in each prompt (do not mix languages incorrectly).`;
 
   if (sourceLanguage === "japanese") {
-    // 日本語→インドネシア語: 日本語でインドネシア語の文法を解説
+    if (learnerMode === "ja") {
+      const userPrompt = `Translate the following Japanese text to Indonesian and provide detailed learning information:
+"${text}"
+
+Return a JSON object with this structure:
+{
+  "indonesian": "Indonesian translation",
+  "japanese": "Original Japanese text (unchanged)",
+  "grammar_explanation": "Explain Indonesian grammar, word order, and phrasing in JAPANESE (for Japanese natives learning Indonesian).",
+  "usage_examples": [
+    {"indonesian": "Similar Indonesian example 1", "japanese": "その日本語訳"},
+    {"indonesian": "Similar Indonesian example 2", "japanese": "その日本語訳"}
+  ],
+  "pronunciation_guide": "How to pronounce the Indonesian translation: use katakana where helpful, tips in JAPANESE",
+  "formality_level": "casual/formal/neutral"
+}`;
+      return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
+    }
     const userPrompt = `Translate the following Japanese text to Indonesian and provide detailed learning information:
 "${text}"
 
 Return a JSON object with this structure:
 {
   "indonesian": "Indonesian translation",
-  "japanese": "Original Japanese text or Japanese translation",
-  "grammar_explanation": "インドネシア語の文法解説を日本語で詳しく説明してください。インドネシア語の文法構造、語順、助詞や接辞の使い方などを日本語で解説します。",
+  "japanese": "Original Japanese text (unchanged)",
+  "grammar_explanation": "Explain the Indonesian translation (grammar, word choice, register) entirely in INDONESIAN for Indonesian speakers studying Japanese.",
   "usage_examples": [
     {"indonesian": "Similar Indonesian example 1", "japanese": "その日本語訳"},
     {"indonesian": "Similar Indonesian example 2", "japanese": "その日本語訳"}
   ],
-  "pronunciation_guide": "インドネシア語の発音をカタカナと発音のコツを日本語で説明",
-  "formality_level": "casual/formal/neutral"
+  "pronunciation_guide": "Indonesian pronunciation tips entirely in INDONESIAN",
+  "formality_level": "casual/formal/neutral in English or Indonesian"
 }`;
     return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
-  } else {
-    // インドネシア語→日本語: インドネシア語で日本語の文法を解説
+  }
+
+  if (learnerMode === "ja") {
     const userPrompt = `Translate the following Indonesian text to Japanese and provide detailed learning information:
 "${text}"
 
 Return a JSON object with this structure:
 {
-  "indonesian": "Original Indonesian text or Indonesian translation",
+  "indonesian": "Original Indonesian text (unchanged)",
   "japanese": "Japanese translation",
-  "grammar_explanation": "Jelaskan tata bahasa Jepang dalam bahasa Indonesia. Jelaskan struktur kalimat, partikel, bentuk kata kerja, dan penggunaan dalam bahasa Indonesia secara detail.",
+  "grammar_explanation": "Explain Japanese grammar, particles, and sentence patterns in JAPANESE (for Japanese natives who input Indonesian to learn Japanese phrasing).",
   "usage_examples": [
-    {"indonesian": "Contoh serupa dalam bahasa Indonesia", "japanese": "日本語の例文"},
-    {"indonesian": "Contoh serupa dalam bahasa Indonesia", "japanese": "日本語の例文"}
+    {"indonesian": "Similar Indonesian example 1", "japanese": "日本語の例文"},
+    {"indonesian": "Similar Indonesian example 2", "japanese": "日本語の例文"}
   ],
-  "pronunciation_guide": "Panduan pengucapan bahasa Jepang dalam bahasa Indonesia (cara baca, aksen, dll)",
+  "pronunciation_guide": "Japanese pronunciation / reading notes in JAPANESE",
   "formality_level": "casual/formal/neutral"
 }`;
     return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
   }
+
+  const userPrompt = `Translate the following Indonesian text to Japanese and provide detailed learning information:
+"${text}"
+
+Return a JSON object with this structure:
+{
+  "indonesian": "Original Indonesian text (unchanged)",
+  "japanese": "Japanese translation",
+  "grammar_explanation": "Explain Japanese grammar, particles, and patterns entirely in INDONESIAN (for Indonesian speakers learning Japanese).",
+  "usage_examples": [
+    {"indonesian": "Contoh dalam bahasa Indonesia", "japanese": "日本語の例文"},
+    {"indonesian": "Contoh dalam bahasa Indonesia", "japanese": "日本語の例文"}
+  ],
+  "pronunciation_guide": "Japanese reading and pronunciation help entirely in INDONESIAN",
+  "formality_level": "casual/formal/neutral"
+}`;
+  return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
 }
 
 export async function generateJapaneseReading(text: string): Promise<JapaneseReadingResult> {
-  const systemPrompt = `You are an assistant that converts Japanese text for language learners (hiragana + Hepburn-style romaji).
-Return valid JSON only.`;
+  const systemPrompt = `You convert Japanese learner text to hiragana and Hepburn romaji. Output valid JSON only. No markdown.
+CRITICAL: the "hiragana" field must contain ZERO kanji — rewrite every kanji as hiragana.`;
 
-  const userPrompt = `Convert this Japanese text for learners while preserving punctuation:
+  const runPrompt = (strict: boolean) => `Convert this Japanese text for learners while preserving punctuation:
 "${text}"
 
 Rules:
-- "hiragana": full phrase in hiragana (keep 。、！？ and symbols)
-- "romaji": Hepburn romanization matching the hiragana reading (spaces between words where natural, lowercase with macrons optional: ā ī ū ē ō or plain ascii)
-- Do not include katakana in hiragana unless proper nouns require it
-
+- "hiragana": ENTIRE phrase in hiragana only (no kanji, minimal katakana except loanwords). Keep 。、！？ and western digits.
+- "romaji": Hepburn style matching the reading (spaces between words; ascii a-z)
+${strict ? "- If any kanji remains in hiragana, you failed — convert ALL to hiragana.\n" : ""}
 Return JSON:
 {
-  "original": "${text}",
+  "original": ${JSON.stringify(text)},
   "hiragana": "...",
   "romaji": "..."
 }`;
 
-  const result = await generateJSON<JapaneseReadingResult>(userPrompt, systemPrompt);
+  let result = await generateJSON<JapaneseReadingResult>(runPrompt(false), systemPrompt);
+  let hiragana = typeof result.hiragana === "string" ? result.hiragana : "";
+  if (HAN_REGEX.test(hiragana)) {
+    result = await generateJSON<JapaneseReadingResult>(runPrompt(true), systemPrompt);
+    hiragana = typeof result.hiragana === "string" ? result.hiragana : hiragana;
+  }
+
   return {
     original: result.original || text,
-    hiragana: result.hiragana || text,
+    hiragana: hiragana || text,
     romaji: typeof result.romaji === "string" ? result.romaji : "",
   };
 }

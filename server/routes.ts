@@ -19,18 +19,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI-powered vocabulary generation (no API key needed from client)
+  const aiLimit = {
+    messageJa: "本日のAI生成回数上限に達しました。明日また試してください。",
+    messageId: "Batas pemakaian AI hari ini tercapai. Coba lagi besok.",
+  };
+  const aiFail = {
+    messageJa: "AI生成に失敗しました。もう一度お試しください。",
+    messageId:
+      "Gagal membuat konten AI. Periksa GEMINI_API_KEY di server atau coba lagi.",
+  };
+
   app.post("/api/generate/vocabulary", async (req, res) => {
     try {
-      const { theme, difficulty, count } = req.body;
+      const { theme, difficulty, count, learnerMode } = req.body;
       
       if (!theme || !difficulty) {
         return res.status(400).json({ error: "theme and difficulty are required" });
       }
       
+      const mode = learnerMode === "id" ? "id" : "ja";
       const words = await generateVocabulary(
         theme,
         Number(difficulty),
-        count ? Number(count) : 10
+        count ? Number(count) : 10,
+        mode
       );
       
       res.json({ words });
@@ -39,26 +51,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errorMsg = error?.message || "Failed to generate vocabulary";
       
       if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-        return res.status(429).json({ error: "本日のAI生成回数上限に達しました。明日また試してください。" });
+        return res.status(429).json(aiLimit);
+      }
+      if (errorMsg.includes("GEMINI_API_KEY")) {
+        return res.status(503).json({
+          messageJa: "サーバーに GEMINI_API_KEY が設定されていません。",
+          messageId: "GEMINI_API_KEY belum disetel di server.",
+        });
       }
       
-      res.status(500).json({ error: "AI生成に失敗しました。もう一度お試しください。" });
+      res.status(500).json(aiFail);
     }
   });
 
   // AI-powered sentence generation
   app.post("/api/generate/sentences", async (req, res) => {
     try {
-      const { situation, difficulty, count } = req.body;
+      const { situation, difficulty, count, learnerMode } = req.body;
       
       if (!situation || !difficulty) {
         return res.status(400).json({ error: "situation and difficulty are required" });
       }
       
+      const mode = learnerMode === "id" ? "id" : "ja";
       const sentences = await generateSentences(
         situation,
         Number(difficulty),
-        count ? Number(count) : 5
+        count ? Number(count) : 5,
+        mode
       );
       
       res.json({ sentences });
@@ -67,10 +87,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errorMsg = error?.message || "Failed to generate sentences";
       
       if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-        return res.status(429).json({ error: "本日のAI生成回数上限に達しました。明日また試してください。" });
+        return res.status(429).json(aiLimit);
+      }
+      if (errorMsg.includes("GEMINI_API_KEY")) {
+        return res.status(503).json({
+          messageJa: "サーバーに GEMINI_API_KEY が設定されていません。",
+          messageId: "GEMINI_API_KEY belum disetel di server.",
+        });
       }
       
-      res.status(500).json({ error: "AI生成に失敗しました。もう一度お試しください。" });
+      res.status(500).json(aiFail);
     }
   });
 
@@ -87,7 +113,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "sourceLanguage must be 'japanese' or 'indonesian'" });
       }
       
-      const result = await advancedTranslate(text, sourceLanguage);
+      const learnerMode = req.body.learnerMode === "id" ? "id" : "ja";
+      const result = await advancedTranslate(text, sourceLanguage, learnerMode);
       
       res.json(result);
     } catch (error: any) {
@@ -95,10 +122,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errorMsg = error?.message || "Failed to translate";
       
       if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-        return res.status(429).json({ error: "本日のAI生成回数上限に達しました。明日また試してください。" });
+        return res.status(429).json(aiLimit);
       }
       
-      res.status(500).json({ error: "翻訳に失敗しました。もう一度お試しください。" });
+      res.status(500).json({
+        messageJa: "翻訳に失敗しました。もう一度お試しください。",
+        messageId: "Terjemahan gagal. Coba lagi.",
+      });
     }
   });
 
@@ -115,9 +145,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Japanese reading error:", error);
       const errorMsg = error?.message || "Failed to generate japanese reading";
       if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-        return res.status(429).json({ error: "本日のAI生成回数上限に達しました。明日また試してください。" });
+        return res.status(429).json(aiLimit);
       }
-      res.status(500).json({ error: "読み仮名の生成に失敗しました。" });
+      if (errorMsg.includes("GEMINI_API_KEY")) {
+        return res.status(503).json({
+          messageJa: "サーバーに GEMINI_API_KEY が設定されていません。",
+          messageId: "GEMINI_API_KEY belum disetel di server.",
+        });
+      }
+      res.status(500).json({
+        messageJa: "読み仮名の生成に失敗しました。",
+        messageId: "Gagal membuat bacaan hiragana. Coba lagi.",
+      });
     }
   });
 

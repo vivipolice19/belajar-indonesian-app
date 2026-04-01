@@ -1,8 +1,41 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+export type ApiErrorI18n = { ja: string; id: string };
+
+export function apiErrorMessage(
+  err: unknown,
+  mode: "ja" | "id",
+): string {
+  const i18n = (err as Error & { i18n?: ApiErrorI18n })?.i18n;
+  if (i18n) return mode === "ja" ? i18n.ja : i18n.id;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    try {
+      const j = JSON.parse(text) as {
+        messageJa?: string;
+        messageId?: string;
+        error?: string;
+      };
+      if (typeof j.messageJa === "string" || typeof j.messageId === "string") {
+        const ja = j.messageJa ?? j.messageId ?? text;
+        const id = j.messageId ?? j.messageJa ?? text;
+        const err = new Error(id);
+        (err as Error & { i18n?: ApiErrorI18n }).i18n = { ja, id };
+        throw err;
+      }
+      if (typeof j.error === "string") {
+        const err = new Error(j.error);
+        (err as Error & { i18n?: ApiErrorI18n }).i18n = { ja: j.error, id: j.error };
+        throw err;
+      }
+    } catch (e) {
+      if (e instanceof Error && (e as Error & { i18n?: ApiErrorI18n }).i18n) throw e;
+    }
     throw new Error(`${res.status}: ${text}`);
   }
 }

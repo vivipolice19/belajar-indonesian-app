@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, Volume2, RefreshCw, Loader2, Settings } from
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
@@ -49,12 +49,19 @@ export default function AIWordCardsPage() {
   );
 
   const generateMutation = useMutation({
-    mutationFn: async ({ theme, difficulty }: { theme: string; difficulty: number }) => {
-      const response = await apiRequest(
-        "POST",
-        "/api/generate/vocabulary",
-        { theme, difficulty, count: 10 }
-      );
+    mutationFn: async ({
+      theme,
+      difficulty,
+    }: {
+      theme: string;
+      difficulty: number;
+    }) => {
+      const response = await apiRequest("POST", "/api/generate/vocabulary", {
+        theme,
+        difficulty,
+        count: 10,
+        learnerMode,
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -69,12 +76,10 @@ export default function AIWordCardsPage() {
             : `${data.words.length} kosakata baru dibuat.`,
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       toast({
         title: learnerMode === "ja" ? "エラー" : "Kesalahan",
-        description:
-          error.message ||
-          (learnerMode === "ja" ? "単語の生成に失敗しました" : "Gagal membuat kosakata."),
+        description: apiErrorMessage(error, learnerMode),
         variant: "destructive",
       });
     },

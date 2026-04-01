@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useLearner } from "@/hooks/useLearner";
 import { useJapaneseReading } from "@/hooks/useJapaneseReading";
@@ -39,12 +39,18 @@ export default function AdvancedTranslatePage() {
   const numericRate = useMemo(() => Number(speechRate), [speechRate]);
 
   const translateMutation = useMutation({
-    mutationFn: async ({ text, sourceLanguage }: { text: string; sourceLanguage: "japanese" | "indonesian" }) => {
-      const response = await apiRequest(
-        "POST",
-        "/api/translate/advanced",
-        { text, sourceLanguage }
-      );
+    mutationFn: async ({
+      text,
+      sourceLanguage,
+    }: {
+      text: string;
+      sourceLanguage: "japanese" | "indonesian";
+    }) => {
+      const response = await apiRequest("POST", "/api/translate/advanced", {
+        text,
+        sourceLanguage,
+        learnerMode,
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -53,10 +59,10 @@ export default function AdvancedTranslatePage() {
         description: "翻訳が完了しました！",
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       toast({
-        title: "エラー",
-        description: error.message || "翻訳に失敗しました",
+        title: learnerMode === "ja" ? "エラー" : "Kesalahan",
+        description: apiErrorMessage(error, learnerMode),
         variant: "destructive",
       });
     },
@@ -286,7 +292,9 @@ export default function AdvancedTranslatePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">文法解説</CardTitle>
+              <CardTitle className="text-lg">
+                {learnerMode === "ja" ? "文法解説" : "Penjelasan tata bahasa"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm leading-relaxed whitespace-pre-line" data-testid="text-grammar">
@@ -297,7 +305,9 @@ export default function AdvancedTranslatePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">発音ガイド</CardTitle>
+              <CardTitle className="text-lg">
+                {learnerMode === "ja" ? "発音ガイド" : "Panduan pengucapan"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm leading-relaxed" data-testid="text-pronunciation">
@@ -309,7 +319,9 @@ export default function AdvancedTranslatePage() {
           {result.usage_examples && result.usage_examples.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">用例</CardTitle>
+                <CardTitle className="text-lg">
+                  {learnerMode === "ja" ? "用例" : "Contoh"}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {result.usage_examples.map((example, index) => (
