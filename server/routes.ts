@@ -11,6 +11,10 @@ import {
   generateJapaneseReading,
   generateJapaneseReadingsBatch,
 } from "./lib/gemini";
+import {
+  generateJapaneseReadingLocal,
+  generateJapaneseReadingsBatchLocal,
+} from "./lib/japaneseReadingLocal";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test Gemini connection
@@ -144,7 +148,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .slice(0, 30)
         .map((t: unknown) => String(t).trim())
         .filter(Boolean);
-      const readings = await generateJapaneseReadingsBatch(slice);
+      let readings: Record<string, { hiragana: string; romaji: string }>;
+      try {
+        readings = await generateJapaneseReadingsBatchLocal(slice);
+      } catch {
+        readings = await generateJapaneseReadingsBatch(slice);
+      }
       res.json({ readings });
     } catch (error: any) {
       console.error("Japanese batch reading error:", error);
@@ -172,7 +181,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!text || typeof text !== "string") {
         return res.status(400).json({ error: "text is required" });
       }
-      const result = await generateJapaneseReading(text);
+      let result;
+      try {
+        result = await generateJapaneseReadingLocal(text);
+      } catch {
+        result = await generateJapaneseReading(text);
+      }
       res.json(result);
     } catch (error: any) {
       console.error("Japanese reading error:", error);

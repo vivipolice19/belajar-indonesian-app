@@ -5,7 +5,6 @@ import {
   READING_CACHE_EVENT,
   readCache,
 } from "@/lib/japaneseReadingCache";
-import { getLocalJapaneseReading } from "@/lib/localJapaneseReading";
 
 function toHiraganaLoose(text: string): string {
   return text.replace(/[\u30a1-\u30f6]/g, (ch) =>
@@ -26,7 +25,7 @@ export function useJapaneseReading(text: string, enabled: boolean) {
 
   useLayoutEffect(() => {
     if (!enabled || !text) {
-      setHiragana(toHiraganaLoose(text));
+      setHiragana("");
       setRomaji("");
       setLoading(false);
       return;
@@ -40,45 +39,32 @@ export function useJapaneseReading(text: string, enabled: boolean) {
       return;
     }
 
-    setHiragana(toHiraganaLoose(text));
+    setHiragana("");
     setRomaji("");
 
     let cancelled = false;
     setLoading(true);
-    (async () => {
-      try {
-        // Prefer local conversion (no API usage). Fallback to server when it fails.
-        try {
-          const { hiragana: h, romaji: r } = await getLocalJapaneseReading(text);
-          if (cancelled) return;
-          const nextH = typeof h === "string" && h.trim() ? h : toHiraganaLoose(text);
-          const nextR = typeof r === "string" ? r : "";
-          setHiragana(nextH);
-          setRomaji(nextR);
-          mergeReadingsIntoCache({ [text]: { hiragana: nextH, romaji: nextR } });
-          return;
-        } catch {
-          // continue to API fallback
-        }
-
-        const res = await apiRequest("POST", "/api/japanese/reading", { text });
-        const data = await res.json();
+    apiRequest("POST", "/api/japanese/reading", { text })
+      .then((res) => res.json())
+      .then((data) => {
         if (cancelled) return;
-        const nextH =
-          typeof data?.hiragana === "string" ? data.hiragana : toHiraganaLoose(text);
+        const nextH = typeof data?.hiragana === "string" ? data.hiragana : "";
         const nextR = typeof data?.romaji === "string" ? data.romaji : "";
         setHiragana(nextH);
         setRomaji(nextR);
-        mergeReadingsIntoCache({ [text]: { hiragana: nextH, romaji: nextR } });
-      } catch {
+        if (nextH.trim()) {
+          mergeReadingsIntoCache({ [text]: { hiragana: nextH, romaji: nextR } });
+        }
+      })
+      .catch(() => {
         if (!cancelled) {
-          setHiragana(toHiraganaLoose(text));
+          setHiragana("");
           setRomaji("");
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    })();
+      });
 
     return () => {
       cancelled = true;
