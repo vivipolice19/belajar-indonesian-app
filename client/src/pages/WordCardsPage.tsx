@@ -80,11 +80,9 @@ export default function WordCardsPage() {
     }
     
     if (learnerMode === "ja") {
-      if (!isFlipped) speakIndonesian(currentWord.indonesian);
-      else speakJapanese(currentWord.japanese);
+      speakIndonesian(currentWord.indonesian);
     } else {
-      if (!isFlipped) speakJapanese(currentWord.japanese);
-      else speakIndonesian(currentWord.indonesian);
+      speakJapanese(currentWord.japanese);
     }
     
     if (!progress.wordsPronounced.includes(currentWord.id)) {

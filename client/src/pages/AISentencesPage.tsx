@@ -110,11 +110,9 @@ export default function AISentencesPage() {
     }
 
     if (learnerMode === "ja") {
-      if (!isFlipped) speakIndonesian(currentSentence.indonesian);
-      else speakJapanese(currentSentence.japanese);
+      speakIndonesian(currentSentence.indonesian);
     } else {
-      if (!isFlipped) speakJapanese(currentSentence.japanese);
-      else speakIndonesian(currentSentence.indonesian);
+      speakJapanese(currentSentence.japanese);
     }
   };
 
