@@ -15,12 +15,32 @@ import {
   generateJapaneseReadingLocal,
   generateJapaneseReadingsBatchLocal,
 } from "./lib/japaneseReadingLocal";
+import { synthesizeToMp3Buffer } from "./lib/googleTranslateTts";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test Gemini connection
   app.get("/api/test/gemini", async (req, res) => {
     const result = await testGeminiConnection();
     res.json(result);
+  });
+
+  /** MP3 audio for read-aloud when browser speechSynthesis is silent (server-side TTS proxy). */
+  app.get("/api/tts", async (req, res) => {
+    const text = String(req.query.text ?? "").trim();
+    const lang = String(req.query.lang ?? "id").toLowerCase();
+    const tl: "ja" | "id" = lang === "ja" ? "ja" : "id";
+    if (!text || text.length > 2000) {
+      return res.status(400).json({ error: "bad_request" });
+    }
+    try {
+      const buf = await synthesizeToMp3Buffer(text, tl);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "private, max-age=300");
+      res.send(buf);
+    } catch (e) {
+      console.error("[api/tts]", e);
+      res.status(502).json({ error: "tts_unavailable" });
+    }
   });
 
   // AI-powered vocabulary generation (no API key needed from client)

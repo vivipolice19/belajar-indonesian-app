@@ -6,11 +6,54 @@ interface SpeechRequest {
   rate: number;
 }
 
-/**
- * Web Speech API: many Windows Chromium/Edge builds go silent if `utterance.voice`
- * is set to a mismatched engine. Using only `utterance.lang` + text is the most
- * compatible pattern (same as MDN examples).
- */
+let playingServerAudio: HTMLAudioElement | null = null;
+
+function stopServerAudio(): void {
+  if (playingServerAudio) {
+    playingServerAudio.pause();
+    playingServerAudio.removeAttribute("src");
+    playingServerAudio.load();
+    playingServerAudio = null;
+  }
+}
+
+async function playServerTts(text: string, langCode: "ja" | "id"): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `/api/tts?${new URLSearchParams({ text, lang: langCode })}`,
+    );
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    if (!blob.size) return false;
+
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    playingServerAudio = audio;
+
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        if (playingServerAudio === audio) playingServerAudio = null;
+      };
+      audio.onended = () => {
+        cleanup();
+        resolve();
+      };
+      audio.onerror = () => {
+        cleanup();
+        reject(new Error("audio playback error"));
+      };
+      void audio.play().catch((e) => {
+        cleanup();
+        reject(e);
+      });
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 class SpeechSynthesisManager {
   private static instance: SpeechSynthesisManager | null = null;
   private voices: SpeechSynthesisVoice[] = [];
@@ -170,6 +213,10 @@ function splitIntoPhrases(text: string): string[] {
     .filter(Boolean);
 }
 
+function langToTtsCode(lang: string): "ja" | "id" {
+  return lang.toLowerCase().startsWith("ja") ? "ja" : "id";
+}
+
 export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hasVoices, setHasVoices] = useState(false);
@@ -180,7 +227,10 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
     if (typeof window === "undefined") return;
 
     managerRef.current = SpeechSynthesisManager.getInstance();
-    setIsSupported(managerRef.current.getIsSupported());
+    setIsSupported(
+      typeof Audio !== "undefined" ||
+        (managerRef.current && managerRef.current.getIsSupported()),
+    );
 
     const checkVoices = () => {
       if (managerRef.current) {
@@ -197,18 +247,29 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
   }, []);
 
   const speak = useCallback((text: string, lang: string = "id-ID", rate: number = 0.85) => {
-    if (!managerRef.current) {
-      managerRef.current = SpeechSynthesisManager.getInstance();
-    }
+    if (typeof window === "undefined") return;
 
-    if (!managerRef.current.getIsSupported()) {
-      return;
-    }
+    void (async () => {
+      stopServerAudio();
+      managerRef.current?.cancel();
 
-    setIsSpeaking(true);
-    managerRef.current.speak(text, lang, rate);
+      const trimmed = text?.trim();
+      if (!trimmed) return;
 
-    setTimeout(() => setIsSpeaking(false), 2000);
+      setIsSpeaking(true);
+
+      const code = langToTtsCode(lang);
+      const serverOk = await playServerTts(trimmed, code);
+
+      if (!serverOk && "speechSynthesis" in window) {
+        if (!managerRef.current) {
+          managerRef.current = SpeechSynthesisManager.getInstance();
+        }
+        managerRef.current.speak(trimmed, lang, rate);
+      }
+
+      setTimeout(() => setIsSpeaking(false), 5000);
+    })();
   }, []);
 
   const speakIndonesian = useCallback((text: string) => {
@@ -221,51 +282,68 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
 
   const speakByPhrases = useCallback((text: string, options?: { lang?: string; rate?: number }) => {
     if (typeof window === "undefined") return;
-    if (!managerRef.current) {
-      managerRef.current = SpeechSynthesisManager.getInstance();
-    }
-    if (!managerRef.current.getIsSupported()) return;
 
-    const lang = options?.lang ?? "id-ID";
-    const rate = options?.rate ?? 0.85;
-    const phrases = splitIntoPhrases(text);
-    if (phrases.length === 0) return;
+    void (async () => {
+      if (!managerRef.current) {
+        managerRef.current = SpeechSynthesisManager.getInstance();
+      }
 
-    managerRef.current.cancel();
-    setIsSpeaking(true);
+      const lang = options?.lang ?? "id-ID";
+      const rate = options?.rate ?? 0.85;
+      const phrases = splitIntoPhrases(text);
+      if (phrases.length === 0) return;
 
-    let idx = 0;
-    const speakNext = () => {
-      if (idx >= phrases.length) {
+      stopServerAudio();
+      managerRef.current.cancel();
+      setIsSpeaking(true);
+
+      const code = langToTtsCode(lang);
+      const joined = phrases.join(" ");
+      const serverOk =
+        joined.length > 0 && (await playServerTts(joined.slice(0, 2000), code));
+
+      if (serverOk) {
         setIsSpeaking(false);
         return;
       }
-      const phrase = phrases[idx];
-      const utterance = new SpeechSynthesisUtterance(phrase);
-      utterance.lang = lang;
-      utterance.rate = rate;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      utterance.onend = () => {
-        idx += 1;
-        speakNext();
-      };
-      utterance.onerror = () => {
-        idx += 1;
-        speakNext();
-      };
-      const synth = window.speechSynthesis;
-      void synth.getVoices();
-      if (typeof synth.resume === "function") {
-        synth.resume();
-      }
-      synth.speak(utterance);
-    };
 
-    speakNext();
+      if ("speechSynthesis" in window) {
+        let idx = 0;
+        const speakNext = () => {
+          if (idx >= phrases.length) {
+            setIsSpeaking(false);
+            return;
+          }
+          const phrase = phrases[idx];
+          const utterance = new SpeechSynthesisUtterance(phrase);
+          utterance.lang = lang;
+          utterance.rate = rate;
+          utterance.pitch = 1;
+          utterance.volume = 1;
+          utterance.onend = () => {
+            idx += 1;
+            speakNext();
+          };
+          utterance.onerror = () => {
+            idx += 1;
+            speakNext();
+          };
+          const synth = window.speechSynthesis;
+          void synth.getVoices();
+          if (typeof synth.resume === "function") {
+            synth.resume();
+          }
+          synth.speak(utterance);
+        };
+        speakNext();
+      } else {
+        setIsSpeaking(false);
+      }
+    })();
   }, []);
 
   const cancel = useCallback(() => {
+    stopServerAudio();
     if (managerRef.current) {
       managerRef.current.cancel();
     }
