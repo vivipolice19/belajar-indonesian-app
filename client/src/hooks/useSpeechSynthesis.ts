@@ -97,10 +97,9 @@ class SpeechSynthesisManager {
     );
     if (containsMatch) return containsMatch;
 
-    const defaultVoice = this.voices.find(v => v.default);
-    if (defaultVoice) return defaultVoice;
-
-    return this.voices[0] || null;
+    // No voice for this language: do not fall back to default / first voice.
+    // Assigning e.g. en-US to Japanese text often yields silence or garbage on many engines.
+    return null;
   }
 
   private executeSpeak(request: SpeechRequest): void {
