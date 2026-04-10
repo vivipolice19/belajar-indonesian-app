@@ -113,9 +113,36 @@ class SpeechSynthesisManager {
       if (byName) return byName;
     }
 
-    // No voice for this language: do not fall back to default / first voice.
-    // Assigning e.g. en-US to Japanese text often yields silence or garbage on many engines.
-    return null;
+    const defaultVoice = this.voices.find((v) => v.default);
+    if (defaultVoice) return defaultVoice;
+
+    return this.voices[0] || null;
+  }
+
+  /** True when the voice's BCP-47 tag clearly matches the requested language. */
+  private voiceReasonablyMatches(voice: SpeechSynthesisVoice, lang: string): boolean {
+    const langLower = lang.toLowerCase();
+    const vl = voice.lang.toLowerCase();
+    if (vl === langLower) return true;
+    const prefix = lang.split("-")[0].toLowerCase();
+    if (vl === prefix || vl.startsWith(prefix + "-")) return true;
+    return vl.includes(prefix);
+  }
+
+  /**
+   * Pick a voice but keep utterance.lang = requested lang when the voice tag
+   * does not match (e.g. default en-US voice + ja-JP text). Overwriting lang
+   * with the voice's locale was breaking Japanese on many desktops.
+   */
+  configureUtteranceVoice(utterance: SpeechSynthesisUtterance, lang: string): void {
+    this.refreshVoicesFromEngine();
+    const selectedVoice = this.getBestVoice(lang);
+    utterance.lang = lang;
+    if (!selectedVoice) return;
+    utterance.voice = selectedVoice;
+    if (this.voiceReasonablyMatches(selectedVoice, lang)) {
+      utterance.lang = selectedVoice.lang;
+    }
   }
 
   refreshVoicesFromEngine(): void {
@@ -129,17 +156,8 @@ class SpeechSynthesisManager {
 
   private executeSpeak(request: SpeechRequest): void {
     try {
-      this.refreshVoicesFromEngine();
-
       const utterance = new SpeechSynthesisUtterance(request.text);
-      const selectedVoice = this.getBestVoice(request.lang);
-      
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang;
-      } else {
-        utterance.lang = request.lang;
-      }
+      this.configureUtteranceVoice(utterance, request.lang);
 
       utterance.rate = request.rate;
       utterance.pitch = 1;
@@ -149,7 +167,10 @@ class SpeechSynthesisManager {
       if (typeof synth.resume === "function") {
         synth.resume();
       }
-      synth.cancel();
+      // Unconditional cancel() before speak breaks playback on some Chromium/Edge builds.
+      if (synth.speaking || synth.pending) {
+        synth.cancel();
+      }
       synth.speak(utterance);
     } catch (error) {
       console.warn("Speech synthesis error:", error);
@@ -173,8 +194,6 @@ class SpeechSynthesisManager {
 
     const request: SpeechRequest = { text, lang, rate };
 
-    // Always run TTS in the same turn as the user click. Queueing until voices
-    // load asynchronously often leaves Chromium with no audio (gesture consumed).
     this.refreshVoicesFromEngine();
     this.pendingRequests = [];
     this.executeSpeak(request);
@@ -277,15 +296,8 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         setIsSpeaking(false);
         return;
       }
-      managerRef.current?.refreshVoicesFromEngine();
       const utterance = new SpeechSynthesisUtterance(phrases[idx]);
-      const voice = managerRef.current?.getBestVoice(lang);
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
-      } else {
-        utterance.lang = lang;
-      }
+      managerRef.current?.configureUtteranceVoice(utterance, lang);
       utterance.rate = rate;
       utterance.pitch = 1;
       utterance.volume = 1;
