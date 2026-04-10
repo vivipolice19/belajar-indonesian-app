@@ -2,6 +2,8 @@ import pRetry from "p-retry";
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
+const responseCache = new Map<string, { at: number; value: unknown }>();
 
 /** CJK Unified Ideographs — if hiragana output still contains these, re-prompt */
 const HAN_REGEX = /[\u4e00-\u9fff]/;
@@ -35,6 +37,15 @@ async function generateJSON<T = any>(
   options?: { maxOutputTokens?: number },
 ): Promise<T> {
   const apiKey = getApiKey();
+  const cacheKey = JSON.stringify({
+    prompt,
+    systemPrompt: systemPrompt ?? "",
+    maxOutputTokens: options?.maxOutputTokens ?? 1400,
+  });
+  const cached = responseCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < RESPONSE_CACHE_TTL_MS) {
+    return cached.value as T;
+  }
   const contents: any[] = [];
   
   if (systemPrompt) {
@@ -69,7 +80,7 @@ async function generateJSON<T = any>(
             contents,
             generationConfig: {
               responseMimeType: "application/json",
-              maxOutputTokens: options?.maxOutputTokens ?? 4000,
+              maxOutputTokens: options?.maxOutputTokens ?? 1400,
             },
           }),
           signal: controller.signal,
@@ -108,11 +119,12 @@ async function generateJSON<T = any>(
       }
       return parseGeminiJson<T>(text);
       }, {
-        retries: 3,
-        minTimeout: 1000,
-        maxTimeout: 10000,
+        retries: 1,
+        minTimeout: 600,
+        maxTimeout: 2400,
         factor: 2,
       });
+      responseCache.set(cacheKey, { at: Date.now(), value: response });
       return response;
     } catch (e: any) {
       lastError = e instanceof Error ? e : new Error(String(e));
@@ -158,7 +170,9 @@ Return a JSON object with this structure:
   ]
 }`;
 
-    const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt);
+    const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt, {
+      maxOutputTokens: 1600,
+    });
     const words = result.words || [];
     if (!words.length) throw new Error("Empty vocabulary result");
     return words;
@@ -183,7 +197,9 @@ Return a JSON object with this structure:
   ]
 }`;
 
-  const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt);
+  const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt, {
+    maxOutputTokens: 1600,
+  });
   const words = result.words || [];
   if (!words.length) throw new Error("Empty vocabulary result");
   return words;
@@ -223,7 +239,9 @@ Return a JSON object with this structure:
   ]
 }`;
 
-    const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt);
+    const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt, {
+      maxOutputTokens: 2000,
+    });
     const sentences = result.sentences || [];
     if (!sentences.length) throw new Error("Empty sentences result");
     return sentences;
@@ -248,7 +266,9 @@ Return a JSON object with this structure:
   ]
 }`;
 
-  const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt);
+  const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt, {
+    maxOutputTokens: 2000,
+  });
   const sentences = result.sentences || [];
   if (!sentences.length) throw new Error("Empty sentences result");
   return sentences;

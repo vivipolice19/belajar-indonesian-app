@@ -16,6 +16,7 @@ import {
   generateJapaneseReadingsBatchLocal,
 } from "./lib/japaneseReadingLocal";
 import { synthesizeToMp3Buffer } from "./lib/googleTranslateTts";
+import { WORDS_DATA, SENTENCES_DATA } from "../shared/types";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test Gemini connection
@@ -53,6 +54,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     messageId:
       "Gagal membuat konten AI. Periksa GEMINI_API_KEY di server atau coba lagi.",
   };
+  const isQuotaLike = (msg: string) =>
+    /RESOURCE_EXHAUSTED|Gemini API error:\s*429|(?:^|\D)429(?:\D|$)/i.test(msg);
+  const pickRandom = <T,>(arr: T[], n: number): T[] =>
+    [...arr].sort(() => Math.random() - 0.5).slice(0, Math.max(1, n));
+  const fallbackWords = (
+    theme: string,
+    difficulty: number,
+    count: number,
+  ) => {
+    const maxLv = Math.max(1, Math.min(10, Math.floor(difficulty)));
+    const pool = WORDS_DATA.filter(
+      (w) => (w.category?.includes(theme) ?? false) || w.requiredLevel <= maxLv,
+    );
+    const selected = pickRandom(pool.length ? pool : WORDS_DATA, count);
+    return selected.map((w) => ({
+      indonesian: w.indonesian,
+      japanese: w.japanese,
+      category: w.category || theme,
+      difficulty: maxLv,
+      pronunciation_guide: "",
+    }));
+  };
+  const fallbackSentences = (
+    situation: string,
+    difficulty: number,
+    count: number,
+  ) => {
+    const maxLv = Math.max(1, Math.min(10, Math.floor(difficulty)));
+    const pool = SENTENCES_DATA.filter(
+      (s) => (s.category?.includes(situation) ?? false) || s.requiredLevel <= maxLv,
+    );
+    const selected = pickRandom(pool.length ? pool : SENTENCES_DATA, count);
+    return selected.map((s) => ({
+      indonesian: s.indonesian,
+      japanese: s.japanese,
+      category: s.category || situation,
+      difficulty: maxLv,
+      context: "fallback-local",
+    }));
+  };
 
   app.post("/api/generate/vocabulary", async (req, res) => {
     try {
@@ -75,7 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Vocabulary generation error:", error);
       const errorMsg = error?.message || "Failed to generate vocabulary";
       
-      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+      if (isQuotaLike(errorMsg)) {
         return res.status(429).json(aiLimit);
       }
       if (errorMsg.includes("GEMINI_API_KEY")) {
@@ -84,8 +125,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: "GEMINI_API_KEY belum disetel di server.",
         });
       }
-      
-      res.status(500).json(aiFail);
+
+      const requested = Number(req.body?.count ?? 10);
+      const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 10;
+      const words = fallbackWords(String(req.body?.theme ?? ""), Number(req.body?.difficulty ?? 3), count);
+      res.json({ words, fallback: true });
     }
   });
 
@@ -134,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Sentence generation error:", error);
       const errorMsg = error?.message || "Failed to generate sentences";
       
-      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+      if (isQuotaLike(errorMsg)) {
         return res.status(429).json(aiLimit);
       }
       if (errorMsg.includes("GEMINI_API_KEY")) {
@@ -143,8 +187,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: "GEMINI_API_KEY belum disetel di server.",
         });
       }
-      
-      res.status(500).json(aiFail);
+
+      const requested = Number(req.body?.count ?? 5);
+      const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 5;
+      const sentences = fallbackSentences(String(req.body?.situation ?? ""), Number(req.body?.difficulty ?? 3), count);
+      res.json({ sentences, fallback: true });
     }
   });
 
