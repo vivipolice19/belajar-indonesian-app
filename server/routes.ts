@@ -99,12 +99,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const mode = learnerMode === "id" ? "id" : "ja";
-      const sentences = await generateSentences(
-        situation,
-        Number(difficulty),
-        count ? Number(count) : 5,
-        mode
+      const requested = count ? Number(count) : 5;
+      const safeCount = Number.isFinite(requested)
+        ? Math.max(1, Math.min(10, Math.floor(requested)))
+        : 5;
+      const attemptCounts = Array.from(
+        new Set([safeCount, Math.min(6, safeCount), 4, 3].filter((n) => n >= 1)),
       );
+
+      let sentences: Awaited<ReturnType<typeof generateSentences>> | null = null;
+      let lastError: unknown = null;
+      for (const n of attemptCounts) {
+        try {
+          const out = await generateSentences(
+            situation,
+            Number(difficulty),
+            n,
+            mode
+          );
+          if (Array.isArray(out) && out.length > 0) {
+            sentences = out;
+            break;
+          }
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (!sentences || sentences.length === 0) {
+        throw (lastError instanceof Error ? lastError : new Error("Empty sentences result"));
+      }
       
       res.json({ sentences });
     } catch (error: any) {
