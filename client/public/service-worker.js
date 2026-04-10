@@ -1,54 +1,44 @@
-const CACHE_NAME = 'belajar-v8';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-];
+// CACHE_NAME is replaced with a unique value on each production build (see vite.config.ts).
+const CACHE_NAME = 'belajar-dev';
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-  );
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.map((k) => (k === CACHE_NAME ? Promise.resolve() : caches.delete(k)))),
+    ),
+  );
+  self.clients.claim();
+});
+
 self.addEventListener('fetch', (event) => {
+  const req = event.request;
+
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' }).catch(() => caches.match('/index.html')),
+    );
+    return;
+  }
+
+  if (req.url.includes('service-worker.js')) {
+    event.respondWith(fetch(req, { cache: 'no-store' }));
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
+    fetch(req, { cache: 'no-store' })
       .then((response) => {
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME)
-          .then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
         return response;
       })
-      .catch(() => {
-        return caches.match(event.request);
-      })
+      .catch(() => caches.match(req)),
   );
-});
-
-self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-  // Take control immediately after activation.
-  self.clients.claim();
 });

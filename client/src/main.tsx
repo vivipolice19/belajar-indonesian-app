@@ -3,14 +3,15 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker
+      .register("/service-worker.js", { updateViaCache: "none" })
       .then((registration) => {
-        console.log('SW registered: ', registration);
+        void registration.update();
       })
       .catch((registrationError) => {
-        console.log('SW registration failed: ', registrationError);
+        console.log("SW registration failed: ", registrationError);
       });
   });
 }
