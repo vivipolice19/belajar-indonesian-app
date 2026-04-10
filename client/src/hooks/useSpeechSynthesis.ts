@@ -97,13 +97,40 @@ class SpeechSynthesisManager {
     );
     if (containsMatch) return containsMatch;
 
+    // Mobile / some engines expose ja-* under nonstandard names only.
+    if (langPrefix === "ja") {
+      const byName = this.voices.find((v) =>
+        /japanese|日本|\bja\b|kyoko|nanami|sayaka|lollipop|yuna|keita|takumi|hiroto|haruka/i.test(
+          v.name
+        )
+      );
+      if (byName) return byName;
+    }
+    if (langPrefix === "id") {
+      const byName = this.voices.find((v) =>
+        /indonesian|indonesia|bahasa/i.test(v.name)
+      );
+      if (byName) return byName;
+    }
+
     // No voice for this language: do not fall back to default / first voice.
     // Assigning e.g. en-US to Japanese text often yields silence or garbage on many engines.
     return null;
   }
 
+  refreshVoicesFromEngine(): void {
+    if (typeof window === "undefined" || !this.isSupported) return;
+    const roster = window.speechSynthesis.getVoices();
+    if (roster.length > 0) {
+      this.voices = roster;
+      this.voicesLoaded = true;
+    }
+  }
+
   private executeSpeak(request: SpeechRequest): void {
     try {
+      this.refreshVoicesFromEngine();
+
       const utterance = new SpeechSynthesisUtterance(request.text);
       const selectedVoice = this.getBestVoice(request.lang);
       
@@ -118,7 +145,12 @@ class SpeechSynthesisManager {
       utterance.pitch = 1;
       utterance.volume = 1;
 
-      window.speechSynthesis.speak(utterance);
+      const synth = window.speechSynthesis;
+      if (typeof synth.resume === "function") {
+        synth.resume();
+      }
+      synth.cancel();
+      synth.speak(utterance);
     } catch (error) {
       console.warn("Speech synthesis error:", error);
     }
@@ -141,18 +173,11 @@ class SpeechSynthesisManager {
 
     const request: SpeechRequest = { text, lang, rate };
 
-    if (this.voices.length > 0) {
-      this.executeSpeak(request);
-    } else {
-      this.pendingRequests.push(request);
-      
-      const freshVoices = window.speechSynthesis.getVoices();
-      if (freshVoices.length > 0) {
-        this.voices = freshVoices;
-        this.voicesLoaded = true;
-        this.processPendingRequests();
-      }
-    }
+    // Always run TTS in the same turn as the user click. Queueing until voices
+    // load asynchronously often leaves Chromium with no audio (gesture consumed).
+    this.refreshVoicesFromEngine();
+    this.pendingRequests = [];
+    this.executeSpeak(request);
   }
 
   cancel(): void {
@@ -252,6 +277,7 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         setIsSpeaking(false);
         return;
       }
+      managerRef.current?.refreshVoicesFromEngine();
       const utterance = new SpeechSynthesisUtterance(phrases[idx]);
       const voice = managerRef.current?.getBestVoice(lang);
       if (voice) {
@@ -271,7 +297,11 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         idx += 1;
         speakNext();
       };
-      window.speechSynthesis.speak(utterance);
+      const synth = window.speechSynthesis;
+      if (typeof synth.resume === "function") {
+        synth.resume();
+      }
+      synth.speak(utterance);
     };
 
     speakNext();
