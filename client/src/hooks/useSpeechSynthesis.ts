@@ -6,6 +6,11 @@ interface SpeechRequest {
   rate: number;
 }
 
+/**
+ * Web Speech API: many Windows Chromium/Edge builds go silent if `utterance.voice`
+ * is set to a mismatched engine. Using only `utterance.lang` + text is the most
+ * compatible pattern (same as MDN examples).
+ */
 class SpeechSynthesisManager {
   private static instance: SpeechSynthesisManager | null = null;
   private voices: SpeechSynthesisVoice[] = [];
@@ -17,12 +22,12 @@ class SpeechSynthesisManager {
 
   private constructor() {
     if (typeof window === "undefined") return;
-    
+
     this.isSupported = "speechSynthesis" in window;
     if (!this.isSupported) return;
 
     this.loadVoices();
-    
+
     window.speechSynthesis.onvoiceschanged = () => {
       this.loadVoices();
     };
@@ -41,20 +46,20 @@ class SpeechSynthesisManager {
 
   private loadVoices(): void {
     if (typeof window === "undefined" || !this.isSupported) return;
-    
+
     const availableVoices = window.speechSynthesis.getVoices();
     if (availableVoices.length > 0) {
       this.voices = availableVoices;
-      
+
       if (!this.voicesLoaded) {
         this.voicesLoaded = true;
-        
+
         if (this.loadInterval) {
           clearInterval(this.loadInterval);
           this.loadInterval = null;
         }
       }
-      
+
       this.processPendingRequests();
     }
   }
@@ -63,86 +68,17 @@ class SpeechSynthesisManager {
     if (this.isProcessing || this.voices.length === 0 || this.pendingRequests.length === 0) {
       return;
     }
-    
+
     this.isProcessing = true;
-    
+
     const requests = [...this.pendingRequests];
     this.pendingRequests = [];
-    
+
     for (const request of requests) {
       this.executeSpeak(request);
     }
-    
+
     this.isProcessing = false;
-  }
-
-  getBestVoice(lang: string): SpeechSynthesisVoice | null {
-    if (this.voices.length === 0) return null;
-
-    const langLower = lang.toLowerCase();
-    
-    const exactMatch = this.voices.find(v => v.lang.toLowerCase() === langLower);
-    if (exactMatch) return exactMatch;
-
-    const langPrefix = lang.split("-")[0].toLowerCase();
-    
-    const prefixMatch = this.voices.find(v => 
-      v.lang.toLowerCase().startsWith(langPrefix + "-") ||
-      v.lang.toLowerCase() === langPrefix
-    );
-    if (prefixMatch) return prefixMatch;
-
-    const containsMatch = this.voices.find(v => 
-      v.lang.toLowerCase().includes(langPrefix)
-    );
-    if (containsMatch) return containsMatch;
-
-    // Mobile / some engines expose ja-* under nonstandard names only.
-    if (langPrefix === "ja") {
-      const byName = this.voices.find((v) =>
-        /japanese|日本|\bja\b|kyoko|nanami|sayaka|lollipop|yuna|keita|takumi|hiroto|haruka/i.test(
-          v.name
-        )
-      );
-      if (byName) return byName;
-    }
-    if (langPrefix === "id") {
-      const byName = this.voices.find((v) =>
-        /indonesian|indonesia|bahasa/i.test(v.name)
-      );
-      if (byName) return byName;
-    }
-
-    const defaultVoice = this.voices.find((v) => v.default);
-    if (defaultVoice) return defaultVoice;
-
-    return this.voices[0] || null;
-  }
-
-  /** True when the voice's BCP-47 tag clearly matches the requested language. */
-  private voiceReasonablyMatches(voice: SpeechSynthesisVoice, lang: string): boolean {
-    const langLower = lang.toLowerCase();
-    const vl = voice.lang.toLowerCase();
-    if (vl === langLower) return true;
-    const prefix = lang.split("-")[0].toLowerCase();
-    if (vl === prefix || vl.startsWith(prefix + "-")) return true;
-    return vl.includes(prefix);
-  }
-
-  /**
-   * Pick a voice but keep utterance.lang = requested lang when the voice tag
-   * does not match (e.g. default en-US voice + ja-JP text). Overwriting lang
-   * with the voice's locale was breaking Japanese on many desktops.
-   */
-  configureUtteranceVoice(utterance: SpeechSynthesisUtterance, lang: string): void {
-    this.refreshVoicesFromEngine();
-    const selectedVoice = this.getBestVoice(lang);
-    utterance.lang = lang;
-    if (!selectedVoice) return;
-    utterance.voice = selectedVoice;
-    if (this.voiceReasonablyMatches(selectedVoice, lang)) {
-      utterance.lang = selectedVoice.lang;
-    }
   }
 
   refreshVoicesFromEngine(): void {
@@ -156,21 +92,29 @@ class SpeechSynthesisManager {
 
   private executeSpeak(request: SpeechRequest): void {
     try {
-      const utterance = new SpeechSynthesisUtterance(request.text);
-      this.configureUtteranceVoice(utterance, request.lang);
+      const trimmed = request.text?.trim();
+      if (!trimmed) return;
 
+      const utterance = new SpeechSynthesisUtterance(trimmed);
+      utterance.lang = request.lang;
       utterance.rate = request.rate;
       utterance.pitch = 1;
       utterance.volume = 1;
 
       const synth = window.speechSynthesis;
+      void synth.getVoices();
       if (typeof synth.resume === "function") {
         synth.resume();
       }
-      // Unconditional cancel() before speak breaks playback on some Chromium/Edge builds.
+
       if (synth.speaking || synth.pending) {
         synth.cancel();
       }
+
+      utterance.onerror = (ev) => {
+        console.warn("SpeechSynthesisUtterance error:", ev.error, request.lang);
+      };
+
       synth.speak(utterance);
     } catch (error) {
       console.warn("Speech synthesis error:", error);
@@ -234,19 +178,19 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     managerRef.current = SpeechSynthesisManager.getInstance();
     setIsSupported(managerRef.current.getIsSupported());
-    
+
     const checkVoices = () => {
       if (managerRef.current) {
         setHasVoices(managerRef.current.getHasVoices());
       }
     };
-    
+
     checkVoices();
     const interval = setInterval(checkVoices, 200);
-    
+
     return () => {
       clearInterval(interval);
     };
@@ -256,14 +200,14 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
     if (!managerRef.current) {
       managerRef.current = SpeechSynthesisManager.getInstance();
     }
-    
+
     if (!managerRef.current.getIsSupported()) {
       return;
     }
-    
+
     setIsSpeaking(true);
     managerRef.current.speak(text, lang, rate);
-    
+
     setTimeout(() => setIsSpeaking(false), 2000);
   }, []);
 
@@ -296,8 +240,9 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         setIsSpeaking(false);
         return;
       }
-      const utterance = new SpeechSynthesisUtterance(phrases[idx]);
-      managerRef.current?.configureUtteranceVoice(utterance, lang);
+      const phrase = phrases[idx];
+      const utterance = new SpeechSynthesisUtterance(phrase);
+      utterance.lang = lang;
       utterance.rate = rate;
       utterance.pitch = 1;
       utterance.volume = 1;
@@ -310,6 +255,7 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         speakNext();
       };
       const synth = window.speechSynthesis;
+      void synth.getVoices();
       if (typeof synth.resume === "function") {
         synth.resume();
       }

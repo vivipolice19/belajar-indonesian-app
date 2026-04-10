@@ -79,9 +79,11 @@ export default function SentencesPage() {
     }
     
     if (learnerMode === "ja") {
-      speakIndonesian(currentSentence.indonesian);
+      if (!isFlipped) speakIndonesian(currentSentence.indonesian);
+      else speakJapanese(currentSentence.japanese);
     } else {
-      speakJapanese(currentSentence.japanese);
+      if (!isFlipped) speakJapanese(currentSentence.japanese);
+      else speakIndonesian(currentSentence.indonesian);
     }
     
     if (!progress.sentencesPronounced.includes(currentSentence.id)) {
