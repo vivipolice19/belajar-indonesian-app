@@ -74,11 +74,15 @@ export default function AISentencesPage() {
       setCurrentIndex(0);
       setIsFlipped(false);
       setShowSettings(false);
+      const isFallback = Boolean(data?.fallback);
       toast({
-        description:
-          learnerMode === "ja"
-            ? `${data.sentences.length}個の新しい文章を生成しました！`
-            : `${data.sentences.length} kalimat baru dibuat.`,
+        description: isFallback
+          ? (learnerMode === "ja"
+              ? `${data.sentences.length}件を即時表示（オフライン候補）`
+              : `${data.sentences.length} kalimat ditampilkan cepat (mode cadangan).`)
+          : (learnerMode === "ja"
+              ? `${data.sentences.length}個の新しい文章を生成しました！`
+              : `${data.sentences.length} kalimat baru dibuat.`),
       });
     },
     onError: (error: unknown) => {

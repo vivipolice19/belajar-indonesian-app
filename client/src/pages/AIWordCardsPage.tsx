@@ -74,11 +74,15 @@ export default function AIWordCardsPage() {
       setCurrentIndex(0);
       setIsFlipped(false);
       setShowSettings(false);
+      const isFallback = Boolean(data?.fallback);
       toast({
-        description:
-          learnerMode === "ja"
-            ? `${data.words.length}個の新しい単語を生成しました！`
-            : `${data.words.length} kosakata baru dibuat.`,
+        description: isFallback
+          ? (learnerMode === "ja"
+              ? `${data.words.length}件を即時表示（オフライン候補）`
+              : `${data.words.length} item ditampilkan cepat (mode cadangan).`)
+          : (learnerMode === "ja"
+              ? `${data.words.length}個の新しい単語を生成しました！`
+              : `${data.words.length} kosakata baru dibuat.`),
       });
     },
     onError: (error: unknown) => {

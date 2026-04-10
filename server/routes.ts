@@ -115,9 +115,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Vocabulary generation error:", error);
       const errorMsg = error?.message || "Failed to generate vocabulary";
+      const requested = Number(req.body?.count ?? 10);
+      const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 10;
+      const words = fallbackWords(String(req.body?.theme ?? ""), Number(req.body?.difficulty ?? 3), count);
       
       if (isQuotaLike(errorMsg)) {
-        return res.status(429).json(aiLimit);
+        return res.json({
+          words,
+          fallback: true,
+          fallbackReason: "quota",
+          warningJa: aiLimit.messageJa,
+          warningId: aiLimit.messageId,
+        });
       }
       if (errorMsg.includes("GEMINI_API_KEY")) {
         return res.status(503).json({
@@ -125,11 +134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: "GEMINI_API_KEY belum disetel di server.",
         });
       }
-
-      const requested = Number(req.body?.count ?? 10);
-      const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 10;
-      const words = fallbackWords(String(req.body?.theme ?? ""), Number(req.body?.difficulty ?? 3), count);
-      res.json({ words, fallback: true });
+      res.json({ words, fallback: true, fallbackReason: "error" });
     }
   });
 
@@ -177,9 +182,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Sentence generation error:", error);
       const errorMsg = error?.message || "Failed to generate sentences";
+      const requested = Number(req.body?.count ?? 5);
+      const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 5;
+      const sentences = fallbackSentences(String(req.body?.situation ?? ""), Number(req.body?.difficulty ?? 3), count);
       
       if (isQuotaLike(errorMsg)) {
-        return res.status(429).json(aiLimit);
+        return res.json({
+          sentences,
+          fallback: true,
+          fallbackReason: "quota",
+          warningJa: aiLimit.messageJa,
+          warningId: aiLimit.messageId,
+        });
       }
       if (errorMsg.includes("GEMINI_API_KEY")) {
         return res.status(503).json({
@@ -187,11 +201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: "GEMINI_API_KEY belum disetel di server.",
         });
       }
-
-      const requested = Number(req.body?.count ?? 5);
-      const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 5;
-      const sentences = fallbackSentences(String(req.body?.situation ?? ""), Number(req.body?.difficulty ?? 3), count);
-      res.json({ sentences, fallback: true });
+      res.json({ sentences, fallback: true, fallbackReason: "error" });
     }
   });
 
