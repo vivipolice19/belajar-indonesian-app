@@ -1,7 +1,7 @@
 import pRetry from "p-retry";
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash"];
 
 /** CJK Unified Ideographs — if hiragana output still contains these, re-prompt */
 const HAN_REGEX = /[\u4e00-\u9fff]/;
@@ -35,8 +35,6 @@ async function generateJSON<T = any>(
   options?: { maxOutputTokens?: number },
 ): Promise<T> {
   const apiKey = getApiKey();
-  const url = `${GEMINI_API_URL}/${DEFAULT_MODEL}:generateContent?key=${apiKey}`;
-
   const contents: any[] = [];
   
   if (systemPrompt) {
@@ -55,19 +53,30 @@ async function generateJSON<T = any>(
     parts: [{ text: prompt }]
   });
 
-  const response = await pRetry(
-    async () => {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            responseMimeType: "application/json",
-            maxOutputTokens: options?.maxOutputTokens ?? 4000,
-          },
-        }),
-      });
+  let lastError: Error | null = null;
+  for (const model of MODEL_FALLBACKS) {
+    const url = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
+    try {
+      const response = await pRetry(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents,
+            generationConfig: {
+              responseMimeType: "application/json",
+              maxOutputTokens: options?.maxOutputTokens ?? 4000,
+            },
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!res.ok) {
         const errorText = await res.text();
@@ -90,22 +99,27 @@ async function generateJSON<T = any>(
       ) {
         throw new Error(`Gemini finishReason: ${reason}`);
       }
-      const part = c0?.content?.parts?.[0];
-      const text = typeof part?.text === "string" ? part.text : "";
+      const text = (c0?.content?.parts || [])
+        .map((p: any) => (typeof p?.text === "string" ? p.text : ""))
+        .join("\n")
+        .trim();
       if (!text.trim()) {
         throw new Error("Gemini returned empty text");
       }
       return parseGeminiJson<T>(text);
-    },
-    {
-      retries: 4,
-      minTimeout: 800,
-      maxTimeout: 12000,
-      factor: 2,
+      }, {
+        retries: 3,
+        minTimeout: 1000,
+        maxTimeout: 10000,
+        factor: 2,
+      });
+      return response;
+    } catch (e: any) {
+      lastError = e instanceof Error ? e : new Error(String(e));
     }
-  );
+  }
 
-  return response;
+  throw lastError ?? new Error("Gemini request failed");
 }
 
 interface VocabularyWord {
@@ -435,7 +449,7 @@ The "items" array MUST have exactly ${unique.length} objects in the SAME ORDER a
 export async function testGeminiConnection(): Promise<{ success: boolean; error?: string }> {
   try {
     const apiKey = getApiKey();
-    const url = `${GEMINI_API_URL}/${DEFAULT_MODEL}:generateContent?key=${apiKey}`;
+    const url = `${GEMINI_API_URL}/${MODEL_FALLBACKS[0]}:generateContent?key=${apiKey}`;
 
     const res = await fetch(url, {
       method: "POST",

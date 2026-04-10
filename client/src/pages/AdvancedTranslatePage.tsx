@@ -46,11 +46,16 @@ export default function AdvancedTranslatePage() {
       text: string;
       sourceLanguage: "japanese" | "indonesian";
     }) => {
-      const response = await apiRequest("POST", "/api/translate/advanced", {
-        text,
-        sourceLanguage,
-        learnerMode,
-      });
+      const response = await apiRequest(
+        "POST",
+        "/api/translate/advanced",
+        {
+          text,
+          sourceLanguage,
+          learnerMode,
+        },
+        { retries: 2, retryDelayMs: 900 },
+      );
       return response.json();
     },
     onSuccess: (data) => {

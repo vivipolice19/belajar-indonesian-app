@@ -44,16 +44,39 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: { retries?: number; retryDelayMs?: number },
 ): Promise<Response> {
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  const retries = options?.retries ?? 0;
+  const retryDelayMs = options?.retryDelayMs ?? 700;
+  const shouldRetryStatus = (status: number) =>
+    status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
 
-  await throwIfResNotOk(res);
-  return res;
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: data ? { "Content-Type": "application/json" } : {},
+        body: data ? JSON.stringify(data) : undefined,
+        credentials: "include",
+      });
+
+      if (!res.ok && shouldRetryStatus(res.status) && attempt < retries) {
+        await new Promise((r) => setTimeout(r, retryDelayMs * (attempt + 1)));
+        continue;
+      }
+
+      await throwIfResNotOk(res);
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= retries) break;
+      await new Promise((r) => setTimeout(r, retryDelayMs * (attempt + 1)));
+    }
+  }
+
+  throw lastErr instanceof Error ? lastErr : new Error("request failed");
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

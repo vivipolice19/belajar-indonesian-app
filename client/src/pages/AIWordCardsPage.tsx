@@ -56,12 +56,17 @@ export default function AIWordCardsPage() {
       theme: string;
       difficulty: number;
     }) => {
-      const response = await apiRequest("POST", "/api/generate/vocabulary", {
-        theme,
-        difficulty,
-        count: 10,
-        learnerMode,
-      });
+      const response = await apiRequest(
+        "POST",
+        "/api/generate/vocabulary",
+        {
+          theme,
+          difficulty,
+          count: 10,
+          learnerMode,
+        },
+        { retries: 2, retryDelayMs: 900 },
+      );
       return response.json();
     },
     onSuccess: (data) => {
