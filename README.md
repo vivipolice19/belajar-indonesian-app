@@ -36,3 +36,25 @@ npm start
 - `AdvancedTranslate` や `AI Word/Sentences` などはサーバー側で Gemini を呼び出します。
 - `GEMINI_API_KEY` が未設定の場合、該当機能はエラーになります。
 
+## ネイティブアプリ化（Capacitor）
+
+このリポジトリは Capacitor 対応済みです。`android/` と `ios/` プロジェクトを生成済みなので、以下で同期とIDE起動ができます。
+
+### 1. Web資産を同期
+```bash
+npm run cap:sync
+```
+
+### 2. Android Studio / Xcode を開く
+```bash
+npm run cap:open:android
+npm run cap:open:ios
+```
+
+### 3. 審査提出前チェック（必須）
+- アプリID / バンドルID（現状: `com.belajarindonesian.app`）を本番用に確定
+- スプラッシュ / アイコン / スクリーンショットをストア要件に合わせて設定
+- プライバシーポリシーURLとサポート連絡先を用意
+- AI機能の説明文（生成結果の注意書き）をストア説明に記載
+- iOS: `App Privacy`、Android: `Data safety` の回答を実態どおり入力
+
