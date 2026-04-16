@@ -16,7 +16,7 @@ import { SENTENCES_DATA, WORDS_DATA } from "../shared/types";
 
 type LearnerMode = "ja" | "id";
 type Deck = "words" | "sentences";
-type Screen = "home" | "study" | "quiz" | "progress";
+type Screen = "home" | "study" | "quiz" | "progress" | "translate";
 type Word = { id?: number; indonesian: string; japanese: string; category?: string };
 type Sentence = {
   id?: number;
@@ -37,6 +37,15 @@ type QuizState = {
   options: string[];
   answer: string;
   speak: "id-ID" | "ja-JP";
+};
+type SourceLanguage = "japanese" | "indonesian";
+type TranslationResult = {
+  indonesian: string;
+  japanese: string;
+  grammar_explanation: string;
+  usage_examples: Array<{ indonesian: string; japanese: string }>;
+  pronunciation_guide: string;
+  formality_level: string;
 };
 
 const API_BASE =
@@ -68,6 +77,10 @@ export default function App() {
   const [quizScore, setQuizScore] = useState(0);
   const [quizCount, setQuizCount] = useState(0);
   const [quizFeedback, setQuizFeedback] = useState("");
+  const [sourceLanguage, setSourceLanguage] = useState<SourceLanguage>("japanese");
+  const [inputText, setInputText] = useState("");
+  const [translation, setTranslation] = useState<TranslationResult | null>(null);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -234,6 +247,32 @@ export default function App() {
     setTimeout(generateQuiz, 500);
   };
 
+  const translateAdvanced = async () => {
+    if (!inputText.trim()) return;
+    setError("");
+    setTranslating(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/translate/advanced`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: inputText,
+          sourceLanguage,
+          learnerMode: mode,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.messageJa || json?.messageId || "translate failed");
+      }
+      setTranslation(json as TranslationResult);
+    } catch (e: any) {
+      setError(e?.message || "翻訳に失敗しました");
+    } finally {
+      setTranslating(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
@@ -247,6 +286,7 @@ export default function App() {
           <Chip active={screen === "home"} onPress={() => setScreen("home")} label="Home" />
           <Chip active={screen === "study"} onPress={() => setScreen("study")} label="Study" />
           <Chip active={screen === "quiz"} onPress={() => setScreen("quiz")} label="Quiz" />
+          <Chip active={screen === "translate"} onPress={() => setScreen("translate")} label="Translate" />
           <Chip active={screen === "progress"} onPress={() => setScreen("progress")} label="Progress" />
         </View>
 
@@ -368,6 +408,96 @@ export default function App() {
             </Pressable>
           </View>
         ) : null}
+
+        {screen === "translate" ? (
+          <View style={styles.panel}>
+            <Text style={styles.h2}>AI高度翻訳</Text>
+            <View style={styles.row}>
+              <Chip
+                active={sourceLanguage === "japanese"}
+                onPress={() => setSourceLanguage("japanese")}
+                label="JP -> ID"
+              />
+              <Chip
+                active={sourceLanguage === "indonesian"}
+                onPress={() => setSourceLanguage("indonesian")}
+                label="ID -> JP"
+              />
+            </View>
+            <TextInput
+              value={inputText}
+              onChangeText={setInputText}
+              style={styles.textarea}
+              multiline
+              placeholder={
+                sourceLanguage === "japanese"
+                  ? "日本語を入力"
+                  : "Masukkan teks bahasa Indonesia"
+              }
+            />
+            <View style={styles.row}>
+              <Chip
+                active={false}
+                onPress={translateAdvanced}
+                label={translating ? "Translating..." : "Translate"}
+              />
+              <Chip
+                active={false}
+                onPress={() => {
+                  setInputText("");
+                  setTranslation(null);
+                  setError("");
+                }}
+                label="Clear"
+              />
+            </View>
+            {translation ? (
+              <>
+                <View style={styles.resultBox}>
+                  <Text style={styles.resultLabel}>Indonesia</Text>
+                  <Text style={styles.resultText}>{translation.indonesian}</Text>
+                  <Chip
+                    active={false}
+                    onPress={() => {
+                      Speech.stop();
+                      Speech.speak(translation.indonesian, {
+                        language: "id-ID",
+                        rate: 0.95,
+                      });
+                    }}
+                    label="Speak ID"
+                  />
+                </View>
+                <View style={styles.resultBox}>
+                  <Text style={styles.resultLabel}>Japanese</Text>
+                  <Text style={styles.resultText}>{translation.japanese}</Text>
+                  <Chip
+                    active={false}
+                    onPress={() => {
+                      Speech.stop();
+                      Speech.speak(translation.japanese, {
+                        language: "ja-JP",
+                        rate: 0.95,
+                      });
+                    }}
+                    label="Speak JP"
+                  />
+                </View>
+                <Text style={styles.resultLabel}>Grammar</Text>
+                <Text style={styles.longText}>{translation.grammar_explanation}</Text>
+                <Text style={styles.resultLabel}>Pronunciation</Text>
+                <Text style={styles.longText}>{translation.pronunciation_guide}</Text>
+                <Text style={styles.resultLabel}>Examples</Text>
+                {translation.usage_examples?.map((ex, idx) => (
+                  <View key={`${ex.indonesian}-${idx}`} style={styles.exampleBox}>
+                    <Text style={styles.examplePrimary}>{ex.indonesian}</Text>
+                    <Text style={styles.exampleSecondary}>{ex.japanese}</Text>
+                  </View>
+                ))}
+              </>
+            ) : null}
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -473,4 +603,33 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   optionText: { color: "#1e3a8a", fontWeight: "600" },
+  textarea: {
+    minHeight: 110,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    textAlignVertical: "top",
+  },
+  resultBox: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  resultLabel: { fontSize: 14, fontWeight: "700", color: "#334155" },
+  resultText: { fontSize: 20, fontWeight: "700", color: "#0f172a" },
+  longText: { color: "#334155", lineHeight: 22 },
+  exampleBox: {
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 10,
+    gap: 4,
+  },
+  examplePrimary: { color: "#0f172a", fontWeight: "600" },
+  exampleSecondary: { color: "#475569" },
 });
