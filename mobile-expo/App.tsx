@@ -47,6 +47,7 @@ type TranslationResult = {
   pronunciation_guide: string;
   formality_level: string;
 };
+type Reading = { kana: string; romaji: string; original: string; loading: boolean };
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
@@ -59,6 +60,49 @@ const INITIAL_PROGRESS: Progress = {
   sentencesPronounced: [],
   quizzesCompleted: 0,
 };
+
+function useJapaneseReading(text: string, enabled: boolean): Reading {
+  const [reading, setReading] = useState<Reading>({
+    kana: "",
+    romaji: "",
+    original: text,
+    loading: false,
+  });
+
+  useEffect(() => {
+    if (!enabled || !text.trim()) {
+      setReading({ kana: "", romaji: "", original: text, loading: false });
+      return;
+    }
+    let cancelled = false;
+    setReading((prev) => ({ ...prev, original: text, loading: true }));
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/japanese/reading`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const json = await res.json();
+        if (cancelled) return;
+        setReading({
+          kana: typeof json?.hiragana === "string" ? json.hiragana : "",
+          romaji: typeof json?.romaji === "string" ? json.romaji : "",
+          original: text,
+          loading: false,
+        });
+      } catch {
+        if (cancelled) return;
+        setReading({ kana: "", romaji: "", original: text, loading: false });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, text]);
+
+  return reading;
+}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -121,6 +165,22 @@ export default function App() {
       : mode === "ja"
         ? (current as Sentence | undefined)?.japanese
         : (current as Sentence | undefined)?.indonesian;
+  const studyJapaneseText =
+    deck === "words"
+      ? mode === "id"
+        ? (current as Word | undefined)?.japanese || ""
+        : (current as Word | undefined)?.japanese || ""
+      : mode === "id"
+        ? (current as Sentence | undefined)?.japanese || ""
+        : (current as Sentence | undefined)?.japanese || "";
+  const studyReading = useJapaneseReading(
+    studyJapaneseText,
+    screen === "study" && !!studyJapaneseText,
+  );
+  const translateReading = useJapaneseReading(
+    translation?.japanese || "",
+    screen === "translate" && !!translation?.japanese,
+  );
 
   const updateProgress = (next: Progress) => setProgress(next);
   const rememberLearned = () => {
@@ -344,6 +404,9 @@ export default function App() {
             >
               <Text style={styles.cardLabel}>{isFlipped ? "裏面" : "表面"}</Text>
               <Text style={styles.cardText}>{isFlipped ? backText : frontText}</Text>
+              {mode === "id" ? (
+                <JapaneseReadingBlock reading={studyReading} />
+              ) : null}
               <Text style={styles.cardHint}>タップで反転</Text>
             </Pressable>
 
@@ -471,6 +534,7 @@ export default function App() {
                 <View style={styles.resultBox}>
                   <Text style={styles.resultLabel}>Japanese</Text>
                   <Text style={styles.resultText}>{translation.japanese}</Text>
+                  <JapaneseReadingBlock reading={translateReading} />
                   <Chip
                     active={false}
                     onPress={() => {
@@ -500,6 +564,19 @@ export default function App() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function JapaneseReadingBlock({ reading }: { reading: Reading }) {
+  if (reading.loading) {
+    return <Text style={styles.readingMeta}>よみがな取得中...</Text>;
+  }
+  if (!reading.kana && !reading.romaji) return null;
+  return (
+    <View style={styles.readingBox}>
+      {!!reading.romaji && <Text style={styles.readingRomaji}>{reading.romaji}</Text>}
+      {!!reading.kana && <Text style={styles.readingKana}>{reading.kana}</Text>}
+    </View>
   );
 }
 
@@ -624,6 +701,27 @@ const styles = StyleSheet.create({
   resultLabel: { fontSize: 14, fontWeight: "700", color: "#334155" },
   resultText: { fontSize: 20, fontWeight: "700", color: "#0f172a" },
   longText: { color: "#334155", lineHeight: 22 },
+  readingBox: {
+    marginTop: 4,
+    alignItems: "center",
+    gap: 2,
+  },
+  readingRomaji: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  readingKana: {
+    color: "#2563eb",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  readingMeta: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 4,
+  },
   exampleBox: {
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
