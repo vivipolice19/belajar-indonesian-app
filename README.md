@@ -58,3 +58,19 @@ npm run cap:open:ios
 - AI機能の説明文（生成結果の注意書き）をストア説明に記載
 - iOS: `App Privacy`、Android: `Data safety` の回答を実態どおり入力
 
+## Expo移行ブランチ（並行比較用）
+
+既存Web/Render版を残したまま、並行で Expo 版の土台を `mobile-expo/` に追加しています。
+
+```bash
+cd mobile-expo
+npm install
+npm start
+```
+
+環境変数でAPI先を切り替える場合:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=https://belajar-indonesian-app.onrender.com npm start
+```
+
