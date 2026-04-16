@@ -16,7 +16,15 @@ import { SENTENCES_DATA, WORDS_DATA } from "../shared/types";
 
 type LearnerMode = "ja" | "id";
 type Deck = "words" | "sentences";
-type Screen = "home" | "study" | "quiz" | "progress" | "translate";
+type Screen =
+  | "home"
+  | "studyWords"
+  | "studySentences"
+  | "aiWords"
+  | "aiSentences"
+  | "quiz"
+  | "progress"
+  | "translate";
 type Word = { id?: number; indonesian: string; japanese: string; category?: string };
 type Sentence = {
   id?: number;
@@ -141,16 +149,19 @@ export default function App() {
     void AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
   }, [progress]);
 
+  const activeDeck: Deck =
+    screen === "studySentences" || screen === "aiSentences" ? "sentences" : "words";
+
   const items = useMemo(() => {
-    if (deck === "words") {
+    if (activeDeck === "words") {
       return (aiWords.length ? aiWords : (WORDS_DATA as unknown as Word[])) as (Word | Sentence)[];
     }
     return (aiSentences.length ? aiSentences : (SENTENCES_DATA as unknown as Sentence[])) as (Word | Sentence)[];
-  }, [deck, aiWords, aiSentences]);
+  }, [activeDeck, aiWords, aiSentences]);
 
   const current = items[index % Math.max(items.length, 1)] as Word | Sentence | undefined;
   const frontText =
-    deck === "words"
+    activeDeck === "words"
       ? mode === "ja"
         ? (current as Word | undefined)?.indonesian
         : (current as Word | undefined)?.japanese
@@ -158,7 +169,7 @@ export default function App() {
         ? (current as Sentence | undefined)?.indonesian
         : (current as Sentence | undefined)?.japanese;
   const backText =
-    deck === "words"
+    activeDeck === "words"
       ? mode === "ja"
         ? (current as Word | undefined)?.japanese
         : (current as Word | undefined)?.indonesian
@@ -166,7 +177,7 @@ export default function App() {
         ? (current as Sentence | undefined)?.japanese
         : (current as Sentence | undefined)?.indonesian;
   const studyJapaneseText =
-    deck === "words"
+    activeDeck === "words"
       ? mode === "id"
         ? (current as Word | undefined)?.japanese || ""
         : (current as Word | undefined)?.japanese || ""
@@ -175,7 +186,11 @@ export default function App() {
         : (current as Sentence | undefined)?.japanese || "";
   const studyReading = useJapaneseReading(
     studyJapaneseText,
-    screen === "study" && !!studyJapaneseText,
+    (screen === "studyWords" ||
+      screen === "studySentences" ||
+      screen === "aiWords" ||
+      screen === "aiSentences") &&
+      !!studyJapaneseText,
   );
   const translateReading = useJapaneseReading(
     translation?.japanese || "",
@@ -185,10 +200,10 @@ export default function App() {
   const updateProgress = (next: Progress) => setProgress(next);
   const rememberLearned = () => {
     if (!current?.id) return;
-    if (deck === "words" && !progress.wordsLearned.includes(current.id)) {
+    if (activeDeck === "words" && !progress.wordsLearned.includes(current.id)) {
       updateProgress({ ...progress, wordsLearned: [...progress.wordsLearned, current.id] });
     }
-    if (deck === "sentences" && !progress.sentencesLearned.includes(current.id)) {
+    if (activeDeck === "sentences" && !progress.sentencesLearned.includes(current.id)) {
       updateProgress({
         ...progress,
         sentencesLearned: [...progress.sentencesLearned, current.id],
@@ -203,13 +218,13 @@ export default function App() {
     Speech.stop();
     Speech.speak(text, { language, rate: 0.95 });
     if (current.id) {
-      if (deck === "words" && !progress.wordsPronounced.includes(current.id)) {
+      if (activeDeck === "words" && !progress.wordsPronounced.includes(current.id)) {
         updateProgress({
           ...progress,
           wordsPronounced: [...progress.wordsPronounced, current.id],
         });
       }
-      if (deck === "sentences" && !progress.sentencesPronounced.includes(current.id)) {
+      if (activeDeck === "sentences" && !progress.sentencesPronounced.includes(current.id)) {
         updateProgress({
           ...progress,
           sentencesPronounced: [...progress.sentencesPronounced, current.id],
@@ -234,9 +249,9 @@ export default function App() {
     setIndex(0);
     try {
       const path =
-        deck === "words" ? "/api/generate/vocabulary" : "/api/generate/sentences";
+        activeDeck === "words" ? "/api/generate/vocabulary" : "/api/generate/sentences";
       const body =
-        deck === "words"
+        activeDeck === "words"
           ? { theme, difficulty: Number(difficulty), count: 8, learnerMode: mode }
           : {
               situation: theme,
@@ -253,7 +268,7 @@ export default function App() {
       if (!res.ok) {
         throw new Error(json?.messageJa || json?.messageId || "AI generation failed");
       }
-      if (deck === "words") setAiWords(Array.isArray(json.words) ? json.words : []);
+      if (activeDeck === "words") setAiWords(Array.isArray(json.words) ? json.words : []);
       else setAiSentences(Array.isArray(json.sentences) ? json.sentences : []);
     } catch (e: any) {
       setError(e?.message || "生成に失敗しました");
@@ -263,7 +278,7 @@ export default function App() {
   };
 
   const generateQuiz = () => {
-    const pool = deck === "words" ? (WORDS_DATA as unknown as Word[]) : (SENTENCES_DATA as unknown as Sentence[]);
+    const pool = activeDeck === "words" ? (WORDS_DATA as unknown as Word[]) : (SENTENCES_DATA as unknown as Sentence[]);
     const picked = pool[Math.floor(Math.random() * pool.length)];
     const others = pool
       .filter((x) => x !== picked)
@@ -293,7 +308,7 @@ export default function App() {
 
   useEffect(() => {
     if (screen === "quiz" && !quiz) generateQuiz();
-  }, [screen, deck, mode]);
+  }, [screen, activeDeck, mode]);
 
   const answerQuiz = (choice: string) => {
     if (!quiz) return;
@@ -344,38 +359,79 @@ export default function App() {
 
         <View style={styles.row}>
           <Chip active={screen === "home"} onPress={() => setScreen("home")} label="Home" />
-          <Chip active={screen === "study"} onPress={() => setScreen("study")} label="Study" />
           <Chip active={screen === "quiz"} onPress={() => setScreen("quiz")} label="Quiz" />
           <Chip active={screen === "translate"} onPress={() => setScreen("translate")} label="Translate" />
           <Chip active={screen === "progress"} onPress={() => setScreen("progress")} label="Progress" />
         </View>
 
         <View style={styles.row}>
-          <Chip active={mode === "ja"} onPress={() => setMode("ja")} label="ja mode" />
-          <Chip active={mode === "id"} onPress={() => setMode("id")} label="id mode" />
-          <Chip active={deck === "words"} onPress={() => { setDeck("words"); setIndex(0); }} label="Words" />
-          <Chip active={deck === "sentences"} onPress={() => { setDeck("sentences"); setIndex(0); }} label="Sentences" />
+          <Chip active={false} onPress={() => setMode("ja")} label={mode === "ja" ? "ja mode*" : "ja mode"} />
+          <Chip active={false} onPress={() => setMode("id")} label={mode === "id" ? "id mode*" : "id mode"} />
         </View>
 
         {screen === "home" ? (
-          <View style={styles.panel}>
-            <Text style={styles.h2}>現在の状態</Text>
-            <Text style={styles.meta}>mode: {mode === "ja" ? "日本語話者" : "インドネシア語話者"}</Text>
-            <Text style={styles.meta}>deck: {deck}</Text>
-            <Text style={styles.meta}>学習済み単語: {progress.wordsLearned.length}</Text>
-            <Text style={styles.meta}>学習済み文章: {progress.sentencesLearned.length}</Text>
-            <Text style={styles.meta}>クイズ回数: {progress.quizzesCompleted}</Text>
-          </View>
+          <>
+            <View style={styles.panel}>
+              <Text style={styles.h2}>現在の状態</Text>
+              <Text style={styles.meta}>mode: {mode === "ja" ? "日本語話者" : "インドネシア語話者"}</Text>
+              <Text style={styles.meta}>学習済み単語: {progress.wordsLearned.length}</Text>
+              <Text style={styles.meta}>学習済み文章: {progress.sentencesLearned.length}</Text>
+              <Text style={styles.meta}>クイズ回数: {progress.quizzesCompleted}</Text>
+            </View>
+
+            <View style={styles.menuGrid}>
+              <MenuCard
+                title="単語学習"
+                subtitle="ローカル単語カード"
+                onPress={() => {
+                  setDeck("words");
+                  setScreen("studyWords");
+                  setIndex(0);
+                  setIsFlipped(false);
+                }}
+              />
+              <MenuCard
+                title="文章学習"
+                subtitle="ローカル文章カード"
+                onPress={() => {
+                  setDeck("sentences");
+                  setScreen("studySentences");
+                  setIndex(0);
+                  setIsFlipped(false);
+                }}
+              />
+              <MenuCard
+                title="AI単語"
+                subtitle="AIで単語セット生成"
+                onPress={() => {
+                  setDeck("words");
+                  setScreen("aiWords");
+                  setIndex(0);
+                  setIsFlipped(false);
+                }}
+              />
+              <MenuCard
+                title="AI文章"
+                subtitle="AIで文章セット生成"
+                onPress={() => {
+                  setDeck("sentences");
+                  setScreen("aiSentences");
+                  setIndex(0);
+                  setIsFlipped(false);
+                }}
+              />
+            </View>
+          </>
         ) : null}
 
-        {screen === "study" ? (
+        {screen === "studyWords" || screen === "studySentences" || screen === "aiWords" || screen === "aiSentences" ? (
           <>
             <View style={styles.aiBox}>
               <TextInput
                 value={theme}
                 onChangeText={setTheme}
                 style={styles.input}
-                placeholder={deck === "words" ? "テーマ" : "シチュエーション"}
+                placeholder={activeDeck === "words" ? "テーマ" : "シチュエーション"}
               />
               <TextInput
                 value={difficulty}
@@ -384,13 +440,15 @@ export default function App() {
                 keyboardType="number-pad"
                 placeholder="1-9"
               />
-              <Pressable style={styles.genButton} onPress={generateAI} disabled={loading}>
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.genText}>AI生成</Text>
-                )}
-              </Pressable>
+              {screen === "aiWords" || screen === "aiSentences" ? (
+                <Pressable style={styles.genButton} onPress={generateAI} disabled={loading}>
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.genText}>AI生成</Text>
+                  )}
+                </Pressable>
+              ) : null}
             </View>
 
             {!!error && <Text style={styles.error}>{error}</Text>}
@@ -580,6 +638,23 @@ function JapaneseReadingBlock({ reading }: { reading: Reading }) {
   );
 }
 
+function MenuCard({
+  title,
+  subtitle,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.menuCard} onPress={onPress}>
+      <Text style={styles.menuTitle}>{title}</Text>
+      <Text style={styles.menuSubtitle}>{subtitle}</Text>
+    </Pressable>
+  );
+}
+
 function Chip({
   active,
   onPress,
@@ -611,6 +686,17 @@ const styles = StyleSheet.create({
   },
   h2: { fontSize: 20, fontWeight: "700", color: "#0f172a" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  menuGrid: { gap: 10 },
+  menuCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    borderRadius: 16,
+    padding: 16,
+    gap: 4,
+  },
+  menuTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  menuSubtitle: { color: "#475569" },
   chip: {
     backgroundColor: "#e2e8f0",
     borderRadius: 999,
