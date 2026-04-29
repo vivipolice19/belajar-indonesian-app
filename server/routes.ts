@@ -16,6 +16,7 @@ import {
   generateJapaneseReadingsBatchLocal,
 } from "./lib/japaneseReadingLocal";
 import { synthesizeToMp3Buffer } from "./lib/googleTranslateTts";
+import { buildAdvancedTranslateFallback } from "./lib/advancedTranslateFallback";
 import { WORDS_DATA, SENTENCES_DATA } from "../shared/types";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -225,14 +226,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Translation error:", error);
       const errorMsg = error?.message || "Failed to translate";
+      const sourceLanguage = req.body?.sourceLanguage === "indonesian" ? "indonesian" : "japanese";
+      const learnerMode = req.body?.learnerMode === "id" ? "id" : "ja";
+      const fallback = buildAdvancedTranslateFallback(String(req.body?.text ?? ""), sourceLanguage, learnerMode);
       
       if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-        return res.status(429).json(aiLimit);
+        return res.json({
+          ...fallback,
+          fallback: true,
+          fallbackReason: "quota",
+          warningJa: aiLimit.messageJa,
+          warningId: aiLimit.messageId,
+        });
       }
       
-      res.status(500).json({
-        messageJa: "翻訳に失敗しました。もう一度お試しください。",
-        messageId: "Terjemahan gagal. Coba lagi.",
+      res.json({
+        ...fallback,
+        fallback: true,
+        fallbackReason: "error",
+        warningJa: "翻訳サーバーが不安定なため、簡易モードで表示しています。",
+        warningId: "Server terjemahan sedang tidak stabil. Menampilkan mode sederhana.",
       });
     }
   });

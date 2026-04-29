@@ -1,6 +1,7 @@
 import path from "path";
 import kuromoji from "kuromoji";
 import { toRomaji } from "wanakana";
+import { normalizeLearnerRomaji } from "../../shared/romajiLearnerNormalize";
 
 export type LocalReading = {
   original: string;
@@ -60,17 +61,43 @@ export async function generateJapaneseReadingLocal(text: string): Promise<LocalR
   }
 
   const hiragana = hiraParts.join("").replace(/\s+/g, " ").trim();
-  const romaji = romajiParts
+  const romajiRaw = romajiParts
     .join(" ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+  const romaji = normalizeLearnerRomaji(romajiRaw);
 
   return {
     original: text,
     hiragana: hiragana || text,
     romaji,
   };
+}
+
+/**
+ * Google translate_tts は「彼は」の助詞「は」を「ハ」と読むことがある。
+ * 助詞と分かる表記だけを読みの仮名に寄せてから TTS に渡す（表示用テキストは変えない）。
+ */
+export async function normalizeJapaneseForGoogleTts(text: string): Promise<string> {
+  const tokenizer = await ensureTokenizer();
+  const tokens = tokenizer.tokenize(text) as Token[];
+  let out = "";
+  for (const t of tokens) {
+    const surf = t.surface_form || "";
+    const pos = String(t.pos || "");
+    if (!surf) continue;
+    if (surf === "は" && pos.includes("助詞")) {
+      out += "わ";
+    } else if (surf === "へ" && pos.includes("助詞")) {
+      out += "え";
+    } else if (surf === "を" && pos.includes("助詞")) {
+      out += "お";
+    } else {
+      out += surf;
+    }
+  }
+  return out || text;
 }
 
 export async function generateJapaneseReadingsBatchLocal(

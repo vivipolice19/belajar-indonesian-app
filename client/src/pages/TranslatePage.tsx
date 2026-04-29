@@ -214,25 +214,55 @@ export default function TranslatePage() {
                     </div>
                   </div>
                   
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      onClick={() => pronounceText(result.indonesian, "id-ID")}
-                      title="発音を聞く"
-                      data-testid={`button-pronounce-${result.id}`}
-                    >
-                      <Volume2 className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => pronounceByPhrases(result.indonesian, "id-ID")}
-                      title="文ごとに読み上げ"
-                      data-testid={`button-pronounce-phrases-${result.id}`}
-                    >
-                      文ごと
-                    </Button>
+                  <div className="flex flex-col gap-3 min-w-[120px]">
+                    {learnerMode === "id" ? (
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs font-semibold text-muted-foreground">日本語</span>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => pronounceText(result.japanese, "ja-JP")}
+                            title="日本語で読み上げ"
+                            data-testid={`button-pronounce-ja-${result.id}`}
+                          >
+                            <Volume2 className="w-5 h-5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => pronounceByPhrases(result.japanese, "ja-JP")}
+                            title="日本語を文ごとに読み上げ"
+                            data-testid={`button-pronounce-phrases-ja-${result.id}`}
+                          >
+                            文ごと
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs font-semibold text-muted-foreground">インドネシア語</span>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => pronounceText(result.indonesian, "id-ID")}
+                          title="発音を聞く"
+                          data-testid={`button-pronounce-${result.id}`}
+                        >
+                          <Volume2 className="w-5 h-5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => pronounceByPhrases(result.indonesian, "id-ID")}
+                          title="文ごとに読み上げ"
+                          data-testid={`button-pronounce-phrases-${result.id}`}
+                        >
+                          文ごと
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>

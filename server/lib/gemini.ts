@@ -1,4 +1,5 @@
 import pRetry from "p-retry";
+import { normalizeLearnerRomaji } from "../../shared/romajiLearnerNormalize";
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash"];
@@ -286,6 +287,13 @@ interface TranslationResult {
   formality_level: string;
 }
 
+const ADV_TRANSLATE_CACHE_TTL_MS = 30 * 60 * 1000;
+const advancedTranslateCache = new Map<string, { at: number; value: TranslationResult }>();
+
+function normalizeTranslateTextKey(input: string): string {
+  return input.replace(/\s+/g, " ").trim();
+}
+
 interface JapaneseReadingResult {
   original: string;
   hiragana: string;
@@ -297,14 +305,33 @@ export async function advancedTranslate(
   sourceLanguage: "japanese" | "indonesian",
   learnerMode: LearnerMode = "ja"
 ): Promise<TranslationResult> {
+  const normalizedText = normalizeTranslateTextKey(text);
+  const cacheKey = JSON.stringify({
+    text: normalizedText,
+    sourceLanguage,
+    learnerMode,
+  });
+  const cached = advancedTranslateCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < ADV_TRANSLATE_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
   const systemPrompt = `You are an expert language teacher specializing in Japanese-Indonesian translation.
 Provide detailed explanations suitable for learners. Always respond with valid JSON only. No markdown fences.
 grammar_explanation and pronunciation_guide MUST follow the language rules in each prompt (do not mix languages incorrectly).`;
 
+  const run = async (userPrompt: string) => {
+    const out = await generateJSON<TranslationResult>(userPrompt, systemPrompt, {
+      maxOutputTokens: 1200,
+    });
+    advancedTranslateCache.set(cacheKey, { at: Date.now(), value: out });
+    return out;
+  };
+
   if (sourceLanguage === "japanese") {
     if (learnerMode === "ja") {
       const userPrompt = `Translate the following Japanese text to Indonesian and provide detailed learning information:
-"${text}"
+"${normalizedText}"
 
 Return a JSON object with this structure:
 {
@@ -318,10 +345,10 @@ Return a JSON object with this structure:
   "pronunciation_guide": "How to pronounce the Indonesian translation: use katakana where helpful, tips in JAPANESE",
   "formality_level": "casual/formal/neutral"
 }`;
-      return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
+      return await run(userPrompt);
     }
     const userPrompt = `Translate the following Japanese text to Indonesian and provide detailed learning information:
-"${text}"
+"${normalizedText}"
 
 Return a JSON object with this structure:
 {
@@ -335,12 +362,12 @@ Return a JSON object with this structure:
   "pronunciation_guide": "Indonesian pronunciation tips entirely in INDONESIAN",
   "formality_level": "casual/formal/neutral in English or Indonesian"
 }`;
-    return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
+    return await run(userPrompt);
   }
 
   if (learnerMode === "ja") {
     const userPrompt = `Translate the following Indonesian text to Japanese and provide detailed learning information:
-"${text}"
+"${normalizedText}"
 
 Return a JSON object with this structure:
 {
@@ -354,11 +381,11 @@ Return a JSON object with this structure:
   "pronunciation_guide": "Japanese pronunciation / reading notes in JAPANESE",
   "formality_level": "casual/formal/neutral"
 }`;
-    return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
+    return await run(userPrompt);
   }
 
   const userPrompt = `Translate the following Indonesian text to Japanese and provide detailed learning information:
-"${text}"
+"${normalizedText}"
 
 Return a JSON object with this structure:
 {
@@ -372,7 +399,7 @@ Return a JSON object with this structure:
   "pronunciation_guide": "Japanese reading and pronunciation help entirely in INDONESIAN",
   "formality_level": "casual/formal/neutral"
 }`;
-  return await generateJSON<TranslationResult>(userPrompt, systemPrompt);
+  return await run(userPrompt);
 }
 
 export async function generateJapaneseReading(text: string): Promise<JapaneseReadingResult> {
@@ -384,7 +411,7 @@ CRITICAL: the "hiragana" field must contain ZERO kanji — rewrite every kanji a
 
 Rules:
 - "hiragana": ENTIRE phrase in hiragana only (no kanji, minimal katakana except loanwords). Keep 。、！？ and western digits.
-- "romaji": Hepburn style matching the reading (spaces between words; ascii a-z)
+- "romaji": modified Hepburn for learners, lowercase ascii, spaces between words. When は・を・へ are sentence particles, write wa / o / e (not ha / wo / he). Match the hiragana reading.
 ${strict ? "- If any kanji remains in hiragana, you failed — convert ALL to hiragana.\n" : ""}
 Return JSON:
 {
@@ -400,10 +427,11 @@ Return JSON:
     hiragana = typeof result.hiragana === "string" ? result.hiragana : hiragana;
   }
 
+  const romajiRaw = typeof result.romaji === "string" ? result.romaji : "";
   return {
     original: result.original || text,
     hiragana: hiragana || text,
-    romaji: typeof result.romaji === "string" ? result.romaji : "",
+    romaji: normalizeLearnerRomaji(romajiRaw),
   };
 }
 
@@ -417,12 +445,13 @@ export async function generateJapaneseReadingsBatch(
     throw new Error("batch size must be <= 30");
   }
 
-  const systemPrompt = `You convert Japanese phrases to hiragana and Hepburn romaji for language learners.
+  const systemPrompt = `You convert Japanese phrases to hiragana and modified Hepburn romaji for language learners.
 Output valid JSON only. No markdown.
-CRITICAL: every "hiragana" value must contain ZERO kanji — rewrite all kanji as hiragana.`;
+CRITICAL: every "hiragana" value must contain ZERO kanji — rewrite all kanji as hiragana.
+Romaji: particles は・を・へ as wa / o / e when used as sentence particles.`;
 
   const list = unique.map((t, i) => `${i + 1}. ${JSON.stringify(t)}`).join("\n");
-  const userPrompt = `Convert EACH phrase below. Preserve 。、！？ and digits. Romaji: Hepburn, ascii, spaces between words.
+  const userPrompt = `Convert EACH phrase below. Preserve 。、！？ and digits. Romaji: modified Hepburn for learners, lowercase ascii, spaces between words; particles は・を・へ as wa / o / e (not ha / wo / he).
 
 Phrases:
 ${list}
@@ -446,9 +475,10 @@ The "items" array MUST have exactly ${unique.length} objects in the SAME ORDER a
     const orig = unique[i];
     const row = items[i];
     if (row && typeof row.hiragana === "string" && row.hiragana.trim()) {
+      const romR = typeof row.romaji === "string" ? row.romaji : "";
       out[orig] = {
         hiragana: row.hiragana,
-        romaji: typeof row.romaji === "string" ? row.romaji : "",
+        romaji: normalizeLearnerRomaji(romR),
       };
     }
   }
@@ -456,9 +486,10 @@ The "items" array MUST have exactly ${unique.length} objects in the SAME ORDER a
   for (const row of items) {
     const o = typeof row?.original === "string" ? row.original : "";
     if (o && unique.includes(o) && typeof row.hiragana === "string" && row.hiragana.trim() && !out[o]) {
+      const romR = typeof row.romaji === "string" ? row.romaji : "";
       out[o] = {
         hiragana: row.hiragana,
-        romaji: typeof row.romaji === "string" ? row.romaji : "",
+        romaji: normalizeLearnerRomaji(romR),
       };
     }
   }

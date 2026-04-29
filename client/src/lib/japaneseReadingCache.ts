@@ -1,7 +1,9 @@
+import { normalizeLearnerRomaji } from "@shared/romajiLearnerNormalize";
+
 export type CachedReading = { hiragana: string; romaji: string };
 export type ReadingCache = Record<string, CachedReading>;
 
-export const CACHE_KEY = "belajar_japanese_reading_cache_v2";
+export const CACHE_KEY = "belajar_japanese_reading_cache_v3";
 export const READING_CACHE_EVENT = "belajar:reading-cache-updated";
 
 export function readCache(): ReadingCache {
@@ -32,7 +34,7 @@ export function mergeReadingsIntoCache(
     if (!key || !v) continue;
     const h = typeof v.hiragana === "string" ? v.hiragana : "";
     const r = typeof v.romaji === "string" ? v.romaji : "";
-    if (h || r) cur[key] = { hiragana: h, romaji: r };
+    if (h || r) cur[key] = { hiragana: h, romaji: normalizeLearnerRomaji(r) };
   }
   writeCache(cur);
   try {

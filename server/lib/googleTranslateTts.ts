@@ -4,6 +4,8 @@
  * Chunked: the endpoint rejects very long queries.
  */
 
+import { normalizeJapaneseForGoogleTts } from "./japaneseReadingLocal";
+
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
@@ -41,9 +43,20 @@ export async function synthesizeToMp3Buffer(
   text: string,
   tl: "ja" | "id",
 ): Promise<Buffer> {
-  const clean = text.replace(/\s+/g, " ").trim().slice(0, MAX_TOTAL);
+  let clean = text.replace(/\s+/g, " ").trim().slice(0, MAX_TOTAL);
   if (!clean) {
     throw new Error("empty text");
+  }
+
+  if (tl === "ja") {
+    try {
+      clean = (await normalizeJapaneseForGoogleTts(clean)).trim().slice(0, MAX_TOTAL);
+    } catch {
+      /* keep original */
+    }
+    if (!clean) {
+      throw new Error("empty text");
+    }
   }
 
   const chunks: string[] = [];

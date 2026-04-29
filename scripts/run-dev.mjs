@@ -11,18 +11,12 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 
 function run() {
-  const tsxBin = path.resolve(
-    projectRoot,
-    "node_modules",
-    ".bin",
-    process.platform === "win32" ? "tsx.cmd" : "tsx"
-  );
-
-  const child = spawn(tsxBin, ["server/index.ts"], {
+  const cmd = process.platform === "win32" ? "npx.cmd" : "npx";
+  const child = spawn(cmd, ["tsx", "server/index.ts"], {
     stdio: "inherit",
     cwd: projectRoot,
     env: process.env,
-    shell: false,
+    shell: true,
   });
 
   child.on("exit", (code) => {

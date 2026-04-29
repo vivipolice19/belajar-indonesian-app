@@ -54,8 +54,13 @@ export default function AdvancedTranslatePage() {
           sourceLanguage,
           learnerMode,
         },
-        { retries: 2, retryDelayMs: 900 },
+        { retries: 1, retryDelayMs: 400 },
       );
+      const ct = response.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        const raw = (await response.text()).slice(0, 120);
+        throw new Error(`API returned non-JSON response: ${raw}`);
+      }
       return response.json();
     },
     onSuccess: (data) => {
