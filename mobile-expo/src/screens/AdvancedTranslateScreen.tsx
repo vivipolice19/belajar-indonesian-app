@@ -44,6 +44,45 @@ export function AdvancedTranslateScreen() {
 
   const { speak, cancel, speakByPhrases, isSupported: isSpeechSupported } = useAppSpeech();
   const numericRate = useMemo(() => Number(speechRate), [speechRate]);
+  const t = learnerMode === "ja"
+    ? {
+        back: "メニューへ戻る",
+        title: "AI高度翻訳",
+        subtitle: "文法解説・用例・発音ガイド付きの高度な翻訳",
+        langJa: "日本語",
+        langId: "インドネシア語",
+        placeholderJa: "日本語のテキストを入力してください...",
+        placeholderId: "インドネシア語のテキストを入力してください...",
+        speed: "読み上げ速度",
+        slow: "ゆっくり",
+        normal: "ふつう",
+        fast: "はやい",
+        stop: "停止",
+        translate: "翻訳",
+        translating: "翻訳中...",
+        result: "翻訳結果",
+        idLabel: "インドネシア語",
+        jpLabel: "日本語",
+      }
+    : {
+        back: "Kembali ke menu",
+        title: "Terjemahan lanjutan AI",
+        subtitle: "Terjemahan lengkap dengan tata bahasa, contoh, dan panduan pelafalan",
+        langJa: "Bahasa Jepang",
+        langId: "Bahasa Indonesia",
+        placeholderJa: "Masukkan teks bahasa Jepang...",
+        placeholderId: "Masukkan teks bahasa Indonesia...",
+        speed: "Kecepatan suara",
+        slow: "Lambat",
+        normal: "Normal",
+        fast: "Cepat",
+        stop: "Hentikan",
+        translate: "Terjemahkan",
+        translating: "Menerjemahkan...",
+        result: "Hasil terjemahan",
+        idLabel: "Bahasa Indonesia",
+        jpLabel: "Bahasa Jepang",
+      };
 
   const norm = (s: string) => s.replace(/[。、「」！？!?,.\s]/g, "").toLowerCase().trim();
 
@@ -83,7 +122,7 @@ export function AdvancedTranslateScreen() {
 
   const handleTranslate = async () => {
     if (!inputText.trim()) {
-      Alert.alert("", "テキストを入力してください");
+      Alert.alert("", learnerMode === "ja" ? "テキストを入力してください" : "Masukkan teks terlebih dahulu.");
       return;
     }
     setPending(true);
@@ -141,7 +180,10 @@ export function AdvancedTranslateScreen() {
 
   const pronounceText = (text: string, lang: "id-ID" | "ja-JP") => {
     if (!isSpeechSupported) {
-      Alert.alert("", "お使いのブラウザは音声機能に対応していません");
+      Alert.alert(
+        "",
+        learnerMode === "ja" ? "音声機能を利用できません" : "Fitur suara tidak tersedia.",
+      );
       return;
     }
     speak(text, lang, numericRate);
@@ -149,7 +191,10 @@ export function AdvancedTranslateScreen() {
 
   const pronounceByPhrases = (text: string, lang: "id-ID" | "ja-JP") => {
     if (!isSpeechSupported) {
-      Alert.alert("", "お使いのブラウザは音声機能に対応していません");
+      Alert.alert(
+        "",
+        learnerMode === "ja" ? "音声機能を利用できません" : "Fitur suara tidak tersedia.",
+      );
       return;
     }
     speakByPhrases(text, { lang, rate: numericRate });
@@ -159,27 +204,27 @@ export function AdvancedTranslateScreen() {
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       <Pressable onPress={() => navigation.navigate("Home")} style={styles.backRow} testID="button-back">
         <ArrowLeft size={18} color={design.foreground} />
-        <Text style={styles.backTxt}>メニューへ戻る</Text>
+        <Text style={styles.backTxt}>{t.back}</Text>
       </Pressable>
 
       <View style={styles.card}>
         <View style={styles.titleRow}>
           <Languages size={22} color={design.foreground} />
-          <Text style={styles.title}>AI高度翻訳</Text>
+          <Text style={styles.title}>{t.title}</Text>
         </View>
-        <Text style={styles.subCenter}>文法解説・用例・発音ガイド付きの高度な翻訳</Text>
+        <Text style={styles.subCenter}>{t.subtitle}</Text>
         {translateHint ? <Text style={styles.hintBar}>{translateHint}</Text> : null}
 
         <View style={styles.swapRow}>
           <View style={[styles.badge, sourceLanguage === "japanese" && styles.badgeOn]}>
-            <Text style={[styles.badgeTxt, sourceLanguage === "japanese" && styles.badgeTxtOn]}>日本語</Text>
+            <Text style={[styles.badgeTxt, sourceLanguage === "japanese" && styles.badgeTxtOn]}>{t.langJa}</Text>
           </View>
           <Pressable onPress={handleSwapLanguage} style={styles.swapBtn} testID="button-swap">
             <ArrowLeftRight size={18} color={design.foreground} />
           </Pressable>
           <View style={[styles.badge, sourceLanguage === "indonesian" && styles.badgeOn]}>
             <Text style={[styles.badgeTxt, sourceLanguage === "indonesian" && styles.badgeTxtOn]}>
-              インドネシア語
+              {t.langId}
             </Text>
           </View>
         </View>
@@ -191,36 +236,36 @@ export function AdvancedTranslateScreen() {
           multiline
           placeholder={
             sourceLanguage === "japanese"
-              ? "日本語のテキストを入力してください..."
-              : "Masukkan teks bahasa Indonesia..."
+              ? t.placeholderJa
+              : t.placeholderId
           }
           testID="input-translate"
         />
 
         <View style={styles.rateRow}>
-          <Text style={styles.rateLabel}>読み上げ速度</Text>
+          <Text style={styles.rateLabel}>{t.speed}</Text>
           <Pressable
             style={[styles.rateChip, speechRate === "0.8" && styles.rateChipOn]}
             onPress={() => setSpeechRate("0.8")}
           >
-            <Text style={styles.rateChipTxt}>ゆっくり</Text>
+            <Text style={styles.rateChipTxt}>{t.slow}</Text>
           </Pressable>
           <Pressable
             style={[styles.rateChip, speechRate === "0.95" && styles.rateChipOn]}
             onPress={() => setSpeechRate("0.95")}
             testID="select-speech-rate"
           >
-            <Text style={styles.rateChipTxt}>ふつう</Text>
+            <Text style={styles.rateChipTxt}>{t.normal}</Text>
           </Pressable>
           <Pressable
             style={[styles.rateChip, speechRate === "1.1" && styles.rateChipOn]}
             onPress={() => setSpeechRate("1.1")}
           >
-            <Text style={styles.rateChipTxt}>はやい</Text>
+            <Text style={styles.rateChipTxt}>{t.fast}</Text>
           </Pressable>
           <Pressable style={styles.stopBtn} onPress={cancel} testID="button-speech-stop">
             <Square size={16} color={design.foreground} />
-            <Text style={styles.stopTxt}>停止</Text>
+            <Text style={styles.stopTxt}>{t.stop}</Text>
           </Pressable>
         </View>
 
@@ -233,12 +278,12 @@ export function AdvancedTranslateScreen() {
           {pending ? (
             <View style={styles.rowCenter}>
               <ActivityIndicator color="#fff" />
-              <Text style={styles.translateBtnTxt}>翻訳中...</Text>
+              <Text style={styles.translateBtnTxt}>{t.translating}</Text>
             </View>
           ) : (
             <View style={styles.rowCenter}>
               <Languages size={18} color="#fff" />
-              <Text style={styles.translateBtnTxt}>翻訳</Text>
+              <Text style={styles.translateBtnTxt}>{t.translate}</Text>
             </View>
           )}
         </Pressable>
@@ -247,10 +292,10 @@ export function AdvancedTranslateScreen() {
       {result ? (
         <View style={styles.gapBlock}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>翻訳結果</Text>
+            <Text style={styles.sectionTitle}>{t.result}</Text>
             <View style={styles.block}>
               <View style={styles.labelRow}>
-                <Text style={styles.smallLabel}>インドネシア語</Text>
+                <Text style={styles.smallLabel}>{t.idLabel}</Text>
                 <View style={styles.miniActions}>
                   <Pressable onPress={() => pronounceText(result.indonesian, "id-ID")} testID="button-pronounce-indonesian">
                     <Volume2 size={18} color={design.primary} />
@@ -270,7 +315,7 @@ export function AdvancedTranslateScreen() {
             </View>
             <View style={styles.block}>
               <View style={styles.labelRow}>
-                <Text style={styles.smallLabel}>日本語</Text>
+                <Text style={styles.smallLabel}>{t.jpLabel}</Text>
                 <View style={styles.miniActions}>
                   <Pressable onPress={() => pronounceText(result.japanese, "ja-JP")} testID="button-pronounce-japanese">
                     <Volume2 size={18} color={design.primary} />

@@ -32,7 +32,7 @@ function pickSentence(text: string, sourceLanguage: SourceLanguage) {
     return { s, score: overlapScore(key, src) };
   }).sort((a, b) => b.score - a.score);
 
-  return scored[0]?.score > 2 ? scored[0].s : null;
+  return scored[0]?.score > 0 ? scored[0].s : null;
 }
 
 function pickWord(text: string, sourceLanguage: SourceLanguage) {
@@ -48,7 +48,7 @@ function pickWord(text: string, sourceLanguage: SourceLanguage) {
     return { w, score: overlapScore(key, src) };
   }).sort((a, b) => b.score - a.score);
 
-  return scored[0]?.score > 1 ? scored[0].w : null;
+  return scored[0]?.score > 0 ? scored[0].w : null;
 }
 
 function byCategoryExamples(category?: string): Array<{ indonesian: string; japanese: string }> {
@@ -123,10 +123,8 @@ export function advancedTranslateLocal(
   }
 
   return {
-    indonesian:
-      sourceLanguage === "japanese" ? "（ローカル辞書に未登録です）" : text,
-    japanese:
-      sourceLanguage === "indonesian" ? "（辞書にないため原文を表示）" : text,
+    indonesian: sourceLanguage === "japanese" ? text : "（辞書にないため原文を表示）",
+    japanese: sourceLanguage === "indonesian" ? text : "（ローカル辞書に未登録です）",
     grammar_explanation:
       learnerMode === "ja"
         ? "入力文がローカル辞書に見つからないため、簡易表示に切り替えました。"
