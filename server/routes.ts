@@ -167,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 10;
       const words = fallbackWords(String(req.body?.theme ?? ""), Number(req.body?.difficulty ?? 3), count);
       
-      if (isQuotaLike(errorMsg)) {
+      if (isGeminiQuotaError(errorMsg)) {
         return res.json({
           words,
           fallback: true,
@@ -253,7 +253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const count = Number.isFinite(requested) ? Math.max(1, Math.min(10, Math.floor(requested))) : 5;
       const sentences = fallbackSentences(String(req.body?.situation ?? ""), Number(req.body?.difficulty ?? 3), count);
       
-      if (isQuotaLike(errorMsg)) {
+      if (isGeminiQuotaError(errorMsg)) {
         return res.json({
           sentences,
           fallback: true,
