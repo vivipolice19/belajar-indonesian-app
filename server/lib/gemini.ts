@@ -2,8 +2,13 @@ import pRetry from "p-retry";
 import { normalizeLearnerRomaji } from "../../shared/romajiLearnerNormalize";
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-/** Prefer widely available models first; older keys/regions may not have every preview name. */
-const MODEL_FALLBACKS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+/** Prefer widely available models first. Avoid bare `gemini-1.5-flash` — often 404 on v1beta; use `-latest`/`-002`. */
+const MODEL_FALLBACKS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash-002",
+];
 const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const responseCache = new Map<string, { at: number; value: unknown }>();
 
