@@ -1,13 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { LinearGradient } from "expo-linear-gradient";
 import {
   BookOpen,
   Brain,
   Gamepad2,
   Languages,
   MessageSquare,
-  Sparkles,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -18,126 +17,83 @@ import { design } from "../theme/designTokens";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type WebPath =
-  | "/ai-cards"
-  | "/ai-sentences"
-  | "/ai-translate"
-  | "/cards"
-  | "/quiz"
-  | "/game";
-
-function screenForPath(path: WebPath): keyof RootStackParamList {
-  switch (path) {
-    case "/ai-cards":
-      return "AICards";
-    case "/ai-sentences":
-      return "AISentences";
-    case "/ai-translate":
-      return "AdvancedTranslate";
-    case "/cards":
-      return "WordCards";
-    case "/quiz":
-      return "Quiz";
-    case "/game":
-      return "MiniGame";
-  }
-}
-
-type AiCardDef = {
+type MainCard = {
   titleJa: string;
   titleId: string;
   descriptionJa: string;
   descriptionId: string;
-  path: WebPath;
-  Icon: LucideIcon;
-  gradient: readonly [string, string];
-  iconColor: string;
-};
-
-type ActionCardDef = {
-  titleJa: string;
-  titleId: string;
-  descriptionJa: string;
-  descriptionId: string;
-  path: WebPath;
+  target: keyof RootStackParamList;
   Icon: LucideIcon;
   tint: string;
   iconColor: string;
 };
 
-const aiCards: AiCardDef[] = [
+const mainCards: MainCard[] = [
   {
-    titleJa: "AI無限単語カード",
-    titleId: "Kartu kosakata AI (tanpa batas)",
-    descriptionJa: "AIが無限に新しい単語を生成",
-    descriptionId: "AI membuat kosakata baru tanpa henti",
-    Icon: Sparkles,
-    path: "/ai-cards",
-    gradient: ["rgba(168, 85, 247, 0.12)", "rgba(236, 72, 153, 0.12)"] as const,
-    iconColor: design.purple600,
-  },
-  {
-    titleJa: "AI無限文章学習",
-    titleId: "Belajar kalimat AI (tanpa batas)",
-    descriptionJa: "シチュエーション別に文章を自動生成",
-    descriptionId: "AI membuat kalimat sesuai situasi",
-    Icon: MessageSquare,
-    path: "/ai-sentences",
-    gradient: ["rgba(59, 130, 246, 0.12)", "rgba(6, 182, 212, 0.12)"] as const,
-    iconColor: design.blue600,
-  },
-  {
-    titleJa: "AI高度翻訳",
-    titleId: "Terjemahan AI tingkat lanjut",
-    descriptionJa: "文法解説・用例付きの本格翻訳",
-    descriptionId: "Terjemahan dengan penjelasan tata bahasa & contoh",
-    Icon: Languages,
-    path: "/ai-translate",
-    gradient: ["rgba(34, 197, 94, 0.12)", "rgba(16, 185, 129, 0.12)"] as const,
-    iconColor: design.green600,
-  },
-];
-
-const actionCards: ActionCardDef[] = [
-  {
-    titleJa: "単語カード練習",
-    titleId: "Latihan kartu kosakata",
-    descriptionJa: "基本150語をフラッシュカードで学習",
-    descriptionId: "150 kosakata dasar dengan kartu kilat",
+    titleJa: "単語",
+    titleId: "Kosakata",
+    descriptionJa: "基本150語のマスターと、テーマ別のAI生成",
+    descriptionId: "150 kosakata dasar + AI menurut tema",
+    target: "WordCards",
     Icon: BookOpen,
-    path: "/cards",
     tint: "rgba(14, 165, 233, 0.12)",
     iconColor: design.chart3,
   },
   {
-    titleJa: "クイズに挑戦",
-    titleId: "Kuis pilihan ganda",
-    descriptionJa: "4択クイズで理解度チェック",
-    descriptionId: "Cek pemahaman dengan kuis 4 pilihan",
+    titleJa: "文章",
+    titleId: "Kalimat",
+    descriptionJa: "学習データの文章と、シチュエーション別のAI生成",
+    descriptionId: "Kalimat latihan + AI menurut situasi",
+    target: "Sentences",
+    Icon: MessageSquare,
+    tint: "rgba(59, 130, 246, 0.12)",
+    iconColor: design.blue600,
+  },
+  {
+    titleJa: "高度な翻訳",
+    titleId: "Terjemahan lanjutan",
+    descriptionJa: "文法解説・用例付きの翻訳",
+    descriptionId: "Terjemahan dengan tata bahasa & contoh",
+    target: "AdvancedTranslate",
+    Icon: Languages,
+    tint: "rgba(34, 197, 94, 0.12)",
+    iconColor: design.green600,
+  },
+  {
+    titleJa: "クイズ",
+    titleId: "Kuis",
+    descriptionJa: "4択で理解度チェック",
+    descriptionId: "Kuis pilihan ganda",
+    target: "Quiz",
     Icon: Brain,
-    path: "/quiz",
     tint: "rgba(168, 85, 247, 0.12)",
     iconColor: design.chart2,
   },
   {
     titleJa: "学習ゲーム",
     titleId: "Game belajar",
-    descriptionJa: "タイピング・マッチングゲームで楽しく学習",
-    descriptionId: "Belajar dengan mengetik & mencocokkan",
+    descriptionJa: "タイピング・マッチング",
+    descriptionId: "Mengetik & mencocokkan",
+    target: "MiniGame",
     Icon: Gamepad2,
-    path: "/game",
     tint: "rgba(234, 179, 8, 0.14)",
     iconColor: design.chart4,
+  },
+  {
+    titleJa: "進捗",
+    titleId: "Progres",
+    descriptionJa: "学習記録・履歴の確認",
+    descriptionId: "Lihat catatan dan riwayat belajar",
+    target: "Progress",
+    Icon: TrendingUp,
+    tint: "rgba(16, 185, 129, 0.12)",
+    iconColor: design.green600,
   },
 ];
 
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { mode } = useApp();
-
-  const aiSectionTitle =
-    mode === "ja" ? "AI学習（無限コンテンツ）" : "Belajar AI (konten tak terbatas)";
-  const basicSectionTitle = mode === "ja" ? "基本学習" : "Belajar dasar";
 
   return (
     <View style={styles.page} testID="page-home">
@@ -154,53 +110,18 @@ export function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <View style={styles.sectionHeading}>
-          <Sparkles size={20} color={design.purple600} strokeWidth={2.2} />
-          <Text style={styles.sectionTitle}>{aiSectionTitle}</Text>
-        </View>
-        {aiCards.map((card) => {
+        <Text style={styles.sectionTitle}>
+          {mode === "ja" ? "メニュー" : "Menu"}
+        </Text>
+        {mainCards.map((card) => {
           const Icon = card.Icon;
           const title = mode === "ja" ? card.titleJa : card.titleId;
           const description = mode === "ja" ? card.descriptionJa : card.descriptionId;
           return (
             <Pressable
-              key={card.path}
-              onPress={() => navigation.navigate(screenForPath(card.path))}
-              testID={`card-ai-${card.path}`}
-              style={({ pressed }) => [pressed && styles.pressed]}
-            >
-              <LinearGradient
-                colors={[card.gradient[0], card.gradient[1]]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.cardFrame}
-              >
-                <View style={styles.cardRow}>
-                  <View style={styles.iconTile}>
-                    <Icon size={24} color={card.iconColor} strokeWidth={2.2} />
-                  </View>
-                  <View style={styles.cardTextCol}>
-                    <Text style={styles.cardTitle}>{title}</Text>
-                    <Text style={styles.cardDesc}>{description}</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, styles.basicHeading]}>{basicSectionTitle}</Text>
-        {actionCards.map((card) => {
-          const Icon = card.Icon;
-          const title = mode === "ja" ? card.titleJa : card.titleId;
-          const description = mode === "ja" ? card.descriptionJa : card.descriptionId;
-          return (
-            <Pressable
-              key={card.path}
-              onPress={() => navigation.navigate(screenForPath(card.path))}
-              testID={`card-action-${card.path}`}
+              key={card.target}
+              onPress={() => navigation.navigate(card.target)}
+              testID={`card-home-${card.target}`}
               style={({ pressed }) => [pressed && styles.pressed]}
             >
               <View style={[styles.cardFrame, { backgroundColor: card.tint }]}>
@@ -248,20 +169,12 @@ const styles = StyleSheet.create({
   section: {
     gap: 12,
   },
-  sectionHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  basicHeading: {
-    paddingHorizontal: 4,
-  },
   sectionTitle: {
     fontSize: 18,
     lineHeight: 24,
     fontWeight: "700",
     color: design.foreground,
+    paddingHorizontal: 4,
   },
   cardFrame: {
     borderRadius: 12,

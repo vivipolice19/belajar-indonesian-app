@@ -16,7 +16,7 @@ import { JapaneseLearnerReading } from "../components/JapaneseLearnerReading";
 import { useApp } from "../context/AppContext";
 import { useJapaneseReading } from "../hooks/useJapaneseReading";
 import { useAppSpeech } from "../hooks/useAppSpeech";
-import { generateLocalAiSentences } from "../lib/aiLocalGenerator";
+import { apiErrorMessage, apiRequest } from "../lib/apiRequest";
 import { difficultyLabel, situationDisplay } from "../lib/bilingualLabels";
 import type { RootStackParamList } from "../navigation/types";
 import { design } from "../theme/designTokens";
@@ -61,24 +61,57 @@ export function AISentencesScreen() {
   const handleGenerate = async () => {
     setPending(true);
     try {
-      const list = generateLocalAiSentences(situation, difficulty, learnerMode, 10);
+      const res = await apiRequest(
+        "POST",
+        "/api/generate/sentences",
+        { situation, difficulty, count: 10, learnerMode },
+        { retries: 3, retryDelayMs: 1100 },
+      );
+      const data = (await res.json()) as {
+        sentences?: AISentence[];
+        fallback?: boolean;
+        warningJa?: string;
+        warningId?: string;
+      };
+      const list = Array.isArray(data.sentences) ? data.sentences : [];
+      if (list.length === 0) {
+        Alert.alert(
+          learnerMode === "ja" ? "生成できません" : "Gagal membuat",
+          learnerMode === "ja"
+            ? "文章が0件でした。ネット接続・APIのURL・サーバーのGEMINI_API_KEYを確認してください。"
+            : "Tidak ada kalimat. Periksa jaringan, URL API, dan GEMINI_API_KEY di server.",
+        );
+        setShowSettings(true);
+        return;
+      }
       setSentences(list);
       setCurrentIndex(0);
       setIsFlipped(false);
       setShowSettings(false);
-      Alert.alert(
-        "",
+      const isFallback = Boolean(data?.fallback);
+      const serverWarn =
         learnerMode === "ja"
-          ? `${list.length}個の新しい文章を生成しました！`
-          : `${list.length} kalimat baru dibuat.`,
-      );
-    } catch {
-      Alert.alert(
-        learnerMode === "ja" ? "エラー" : "Kesalahan",
-        learnerMode === "ja"
-          ? "文章生成に失敗しました。"
-          : "Gagal membuat kalimat.",
-      );
+          ? (typeof data.warningJa === "string" ? data.warningJa.trim() : "")
+          : (typeof data.warningId === "string" ? data.warningId.trim() : "");
+      if (isFallback) {
+        const base =
+          learnerMode === "ja"
+            ? `学習データから${list.length}文を表示しています（AI生成ではありません）。`
+            : `Menampilkan ${list.length} kalimat dari data latihan (bukan AI).`;
+        Alert.alert(
+          learnerMode === "ja" ? "AI生成に失敗しました" : "Gagal memakai AI",
+          [serverWarn || null, base].filter(Boolean).join("\n\n"),
+        );
+      } else {
+        Alert.alert(
+          "",
+          learnerMode === "ja"
+            ? `${list.length}個の新しい文章を生成しました！`
+            : `${list.length} kalimat baru dibuat.`,
+        );
+      }
+    } catch (e) {
+      Alert.alert(learnerMode === "ja" ? "エラー" : "Kesalahan", apiErrorMessage(e, learnerMode));
     } finally {
       setPending(false);
     }
@@ -113,13 +146,25 @@ export function AISentencesScreen() {
 
         <View style={styles.setupCard}>
           <Text style={styles.setupTitle}>
-            {learnerMode === "ja" ? "AI無限文章学習" : "Kalimat AI tanpa batas"}
+            {learnerMode === "ja" ? "文章（AI生成）" : "Kalimat (AI)"}
           </Text>
           <Text style={styles.setupSub}>
             {learnerMode === "ja"
-              ? "AIが無限に新しい文章を生成します"
-              : "AI membuat kalimat latihan bahasa Jepang baru secara terus-menerus."}
+              ? "シチュエーションと難易度を選んで、新しい文を生成します。"
+              : "Pilih situasi & tingkat, lalu buat kalimat baru."}
           </Text>
+
+          <Pressable
+            style={styles.basicLink}
+            onPress={() => navigation.navigate("BasicSentences")}
+            testID="link-basic-sentences"
+          >
+            <Text style={styles.basicLinkTxt}>
+              {learnerMode === "ja"
+                ? "学習データの固定文章だけを練習 →"
+                : "Kalimat tetap dari data latihan →"}
+            </Text>
+          </Pressable>
 
           <Text style={styles.fieldLabel}>{learnerMode === "ja" ? "シチュエーション" : "Situasi"}</Text>
           <Pressable style={styles.selectTrigger} onPress={() => setPicker("situation")} testID="select-situation">
@@ -186,7 +231,7 @@ export function AISentencesScreen() {
   return (
     <View style={styles.page} testID="page-ai-sentences">
       <View style={styles.header}>
-        <Text style={styles.title}>{learnerMode === "ja" ? "AI文章学習" : "Belajar kalimat AI"}</Text>
+        <Text style={styles.title}>{learnerMode === "ja" ? "文章" : "Kalimat"}</Text>
         <View style={styles.badgeRow}>
           <View style={styles.badgeOutline} testID="badge-category">
             <Text style={styles.badgeOutlineTxt}>{currentSentence.category}</Text>
@@ -199,8 +244,8 @@ export function AISentencesScreen() {
         </View>
         <Text style={styles.meta}>
           {learnerMode === "ja"
-            ? `${currentIndex + 1} / ${sentences.length} （次の文章は自動生成）`
-            : `${currentIndex + 1} / ${sentences.length} • set berikutnya otomatis`}
+            ? `${currentIndex + 1} / ${sentences.length}（⚙でシチュ変更・再生成）`
+            : `${currentIndex + 1} / ${sentences.length} • ⚙ ubah situasi / buat lagi`}
         </Text>
       </View>
 
@@ -329,6 +374,16 @@ const styles = StyleSheet.create({
   },
   setupTitle: { fontSize: 22, fontWeight: "700", color: design.foreground, textAlign: "center" },
   setupSub: { fontSize: 14, color: design.mutedForeground, textAlign: "center", lineHeight: 20 },
+  basicLink: {
+    alignSelf: "stretch",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: design.primary,
+    backgroundColor: "hsla(12, 100%, 60%, 0.1)",
+  },
+  basicLinkTxt: { color: design.primary, fontWeight: "700", fontSize: 14, textAlign: "center" },
   fieldLabel: { fontSize: 14, fontWeight: "600", color: design.foreground },
   selectTrigger: {
     borderWidth: 1,

@@ -2,7 +2,8 @@ import pRetry from "p-retry";
 import { normalizeLearnerRomaji } from "../../shared/romajiLearnerNormalize";
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+/** Prefer widely available models first; older keys/regions may not have every preview name. */
+const MODEL_FALLBACKS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const responseCache = new Map<string, { at: number; value: unknown }>();
 
@@ -35,16 +36,17 @@ function getApiKey(): string {
 async function generateJSON<T = any>(
   prompt: string,
   systemPrompt?: string,
-  options?: { maxOutputTokens?: number },
+  options?: { maxOutputTokens?: number; cacheTtlMs?: number },
 ): Promise<T> {
   const apiKey = getApiKey();
+  const ttlMs = options?.cacheTtlMs ?? RESPONSE_CACHE_TTL_MS;
   const cacheKey = JSON.stringify({
     prompt,
     systemPrompt: systemPrompt ?? "",
     maxOutputTokens: options?.maxOutputTokens ?? 1400,
   });
   const cached = responseCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < RESPONSE_CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.at < ttlMs) {
     return cached.value as T;
   }
   const contents: any[] = [];
@@ -71,7 +73,8 @@ async function generateJSON<T = any>(
     try {
       const response = await pRetry(async () => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25000);
+      const timeoutMs = Number(process.env.GEMINI_FETCH_TIMEOUT_MS ?? 38000);
+      const timeout = setTimeout(() => controller.abort(), Math.max(12000, Math.min(95000, timeoutMs)));
       let res: Response;
       try {
         res = await fetch(url, {
@@ -120,9 +123,9 @@ async function generateJSON<T = any>(
       }
       return parseGeminiJson<T>(text);
       }, {
-        retries: 1,
+        retries: 2,
         minTimeout: 600,
-        maxTimeout: 2400,
+        maxTimeout: 3500,
         factor: 2,
       });
       responseCache.set(cacheKey, { at: Date.now(), value: response });
@@ -171,10 +174,14 @@ Return a JSON object with this structure:
   ]
 }`;
 
-    const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt, {
-      maxOutputTokens: 1600,
-    });
-    const words = result.words || [];
+    const result = await generateJSON<{ words?: VocabularyWord[]; Words?: VocabularyWord[] }>(
+      userPrompt,
+      systemPrompt,
+      {
+        maxOutputTokens: 1450,
+      },
+    );
+    const words = result.words ?? result.Words ?? [];
     if (!words.length) throw new Error("Empty vocabulary result");
     return words;
   }
@@ -198,10 +205,14 @@ Return a JSON object with this structure:
   ]
 }`;
 
-  const result = await generateJSON<{ words: VocabularyWord[] }>(userPrompt, systemPrompt, {
-    maxOutputTokens: 1600,
-  });
-  const words = result.words || [];
+  const result = await generateJSON<{ words?: VocabularyWord[]; Words?: VocabularyWord[] }>(
+    userPrompt,
+    systemPrompt,
+    {
+      maxOutputTokens: 1450,
+    },
+  );
+  const words = result.words ?? result.Words ?? [];
   if (!words.length) throw new Error("Empty vocabulary result");
   return words;
 }
@@ -240,10 +251,14 @@ Return a JSON object with this structure:
   ]
 }`;
 
-    const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt, {
-      maxOutputTokens: 2000,
-    });
-    const sentences = result.sentences || [];
+    const result = await generateJSON<{ sentences?: SentenceData[]; Sentences?: SentenceData[] }>(
+      userPrompt,
+      systemPrompt,
+      {
+        maxOutputTokens: 1750,
+      },
+    );
+    const sentences = result.sentences ?? result.Sentences ?? [];
     if (!sentences.length) throw new Error("Empty sentences result");
     return sentences;
   }
@@ -267,15 +282,19 @@ Return a JSON object with this structure:
   ]
 }`;
 
-  const result = await generateJSON<{ sentences: SentenceData[] }>(userPrompt, systemPrompt, {
-    maxOutputTokens: 2000,
-  });
-  const sentences = result.sentences || [];
+  const result = await generateJSON<{ sentences?: SentenceData[]; Sentences?: SentenceData[] }>(
+    userPrompt,
+    systemPrompt,
+    {
+      maxOutputTokens: 1750,
+    },
+  );
+  const sentences = result.sentences ?? result.Sentences ?? [];
   if (!sentences.length) throw new Error("Empty sentences result");
   return sentences;
 }
 
-interface TranslationResult {
+export interface TranslationResult {
   indonesian: string;
   japanese: string;
   grammar_explanation: string;
@@ -285,13 +304,6 @@ interface TranslationResult {
   }>;
   pronunciation_guide: string;
   formality_level: string;
-}
-
-const ADV_TRANSLATE_CACHE_TTL_MS = 30 * 60 * 1000;
-const advancedTranslateCache = new Map<string, { at: number; value: TranslationResult }>();
-
-function normalizeTranslateTextKey(input: string): string {
-  return input.replace(/\s+/g, " ").trim();
 }
 
 interface JapaneseReadingResult {
@@ -305,33 +317,14 @@ export async function advancedTranslate(
   sourceLanguage: "japanese" | "indonesian",
   learnerMode: LearnerMode = "ja"
 ): Promise<TranslationResult> {
-  const normalizedText = normalizeTranslateTextKey(text);
-  const cacheKey = JSON.stringify({
-    text: normalizedText,
-    sourceLanguage,
-    learnerMode,
-  });
-  const cached = advancedTranslateCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < ADV_TRANSLATE_CACHE_TTL_MS) {
-    return cached.value;
-  }
-
   const systemPrompt = `You are an expert language teacher specializing in Japanese-Indonesian translation.
 Provide detailed explanations suitable for learners. Always respond with valid JSON only. No markdown fences.
 grammar_explanation and pronunciation_guide MUST follow the language rules in each prompt (do not mix languages incorrectly).`;
 
-  const run = async (userPrompt: string) => {
-    const out = await generateJSON<TranslationResult>(userPrompt, systemPrompt, {
-      maxOutputTokens: 1200,
-    });
-    advancedTranslateCache.set(cacheKey, { at: Date.now(), value: out });
-    return out;
-  };
-
   if (sourceLanguage === "japanese") {
     if (learnerMode === "ja") {
       const userPrompt = `Translate the following Japanese text to Indonesian and provide detailed learning information:
-"${normalizedText}"
+"${text}"
 
 Return a JSON object with this structure:
 {
@@ -345,10 +338,13 @@ Return a JSON object with this structure:
   "pronunciation_guide": "How to pronounce the Indonesian translation: use katakana where helpful, tips in JAPANESE",
   "formality_level": "casual/formal/neutral"
 }`;
-      return await run(userPrompt);
+      return await generateJSON<TranslationResult>(userPrompt, systemPrompt, {
+        maxOutputTokens: 2200,
+        cacheTtlMs: 8 * 60 * 1000,
+      });
     }
     const userPrompt = `Translate the following Japanese text to Indonesian and provide detailed learning information:
-"${normalizedText}"
+"${text}"
 
 Return a JSON object with this structure:
 {
@@ -360,14 +356,17 @@ Return a JSON object with this structure:
     {"indonesian": "Similar Indonesian example 2", "japanese": "その日本語訳"}
   ],
   "pronunciation_guide": "Indonesian pronunciation tips entirely in INDONESIAN",
-  "formality_level": "casual/formal/neutral in English or Indonesian"
+  "formality_level": "Register label in INDONESIAN only (choose one short phrase: santai / formal / netral)"
 }`;
-    return await run(userPrompt);
+    return await generateJSON<TranslationResult>(userPrompt, systemPrompt, {
+      maxOutputTokens: 2200,
+      cacheTtlMs: 8 * 60 * 1000,
+    });
   }
 
   if (learnerMode === "ja") {
     const userPrompt = `Translate the following Indonesian text to Japanese and provide detailed learning information:
-"${normalizedText}"
+"${text}"
 
 Return a JSON object with this structure:
 {
@@ -381,11 +380,14 @@ Return a JSON object with this structure:
   "pronunciation_guide": "Japanese pronunciation / reading notes in JAPANESE",
   "formality_level": "casual/formal/neutral"
 }`;
-    return await run(userPrompt);
+    return await generateJSON<TranslationResult>(userPrompt, systemPrompt, {
+      maxOutputTokens: 2200,
+      cacheTtlMs: 8 * 60 * 1000,
+    });
   }
 
   const userPrompt = `Translate the following Indonesian text to Japanese and provide detailed learning information:
-"${normalizedText}"
+"${text}"
 
 Return a JSON object with this structure:
 {
@@ -397,9 +399,12 @@ Return a JSON object with this structure:
     {"indonesian": "Contoh dalam bahasa Indonesia", "japanese": "日本語の例文"}
   ],
   "pronunciation_guide": "Japanese reading and pronunciation help entirely in INDONESIAN",
-  "formality_level": "casual/formal/neutral"
+  "formality_level": "Register label in INDONESIAN only (santai / formal / netral)"
 }`;
-  return await run(userPrompt);
+  return await generateJSON<TranslationResult>(userPrompt, systemPrompt, {
+    maxOutputTokens: 2200,
+    cacheTtlMs: 8 * 60 * 1000,
+  });
 }
 
 export async function generateJapaneseReading(text: string): Promise<JapaneseReadingResult> {

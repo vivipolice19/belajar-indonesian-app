@@ -1,12 +1,29 @@
+import { useNavigation, useNavigationState, type NavigationState } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Home } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "../context/AppContext";
+import type { RootStackParamList } from "../navigation/types";
 import { MascotIcon } from "./MascotIcon";
 import { design } from "../theme/designTokens";
 
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+function getActiveRouteName(state: NavigationState | undefined): string {
+  if (!state?.routes?.length || state.index === undefined) return "Home";
+  const r = state.routes[state.index];
+  if (r.state) {
+    return getActiveRouteName(r.state as NavigationState);
+  }
+  return r.name;
+}
+
 export function AppHeader() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
   const { mode, setMode } = useApp();
+  const activeRoute = useNavigationState((s) => getActiveRouteName(s as NavigationState | undefined));
   const targetLabel =
     mode === "ja" ? "学習: インドネシア語" : "Belajar: Bahasa Jepang";
 
@@ -38,7 +55,20 @@ export function AppHeader() {
           </View>
           <Text style={styles.target}>{targetLabel}</Text>
         </View>
-        <View style={styles.spacer} accessibilityLabel="header-spacer" />
+        <View style={styles.rightSlot}>
+          {activeRoute !== "Home" ? (
+            <Pressable
+              onPress={() => navigation.navigate("Home")}
+              style={styles.homeBtn}
+              accessibilityLabel="ホーム"
+              accessibilityRole="button"
+            >
+              <Home size={22} color={design.primary} strokeWidth={2.4} />
+            </Pressable>
+          ) : (
+            <View style={styles.homePlaceholder} />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -55,7 +85,18 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   mascotSlot: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   center: { flex: 1, alignItems: "center", gap: 6 },
-  spacer: { width: 40 },
+  rightSlot: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
+  homeBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: design.cardBorder,
+    backgroundColor: design.background,
+  },
+  homePlaceholder: { width: 44, height: 44 },
   title: { fontSize: 20, fontWeight: "800", color: design.foreground },
   toggleRow: { flexDirection: "row", gap: 6 },
   toggleBtn: {

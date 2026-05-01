@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useGameProgress } from "@/hooks/useGameProgress";
 import { useToast } from "@/hooks/use-toast";
 import { useLearner } from "@/hooks/useLearner";
-import { BookOpen, CheckCircle2, Download, MessageSquare, RotateCcw } from "lucide-react";
+import { BookOpen, CheckCircle2, MessageSquare, RotateCcw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -121,21 +121,6 @@ export default function ProgressPage() {
           </div>
         </CardContent>
       </Card>
-
-      <Button
-        variant="outline"
-        className="w-full"
-        data-testid="button-download-project"
-        onClick={() => {
-          const a = document.createElement("a");
-          a.href = "/api/download/project";
-          a.download = "belajar-indonesian-app.zip";
-          a.click();
-        }}
-      >
-        <Download className="w-4 h-4 mr-2" />
-        {learnerMode === "ja" ? "プロジェクトをZIPでダウンロード" : "Unduh proyek (ZIP)"}
-      </Button>
 
       <AlertDialog>
         <AlertDialogTrigger asChild>

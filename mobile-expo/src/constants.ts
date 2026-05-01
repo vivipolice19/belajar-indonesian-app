@@ -1,22 +1,6 @@
-const DEFAULT_API_BASE = "https://belajar-indonesian-app.onrender.com";
-
-function sanitizeApiBase(input?: string): string {
-  const raw = input?.trim();
-  if (!raw) return DEFAULT_API_BASE;
-
-  // Metro/Web dev server accidentally set as API target -> returns HTML (e.g. /@vite/client).
-  if (
-    raw.includes("localhost:8081") ||
-    raw.includes("127.0.0.1:8081") ||
-    raw.includes("localhost:5173") ||
-    raw.includes("127.0.0.1:5173")
-  ) {
-    return DEFAULT_API_BASE;
-  }
-  return raw;
-}
-
-export const API_BASE = sanitizeApiBase(process.env.EXPO_PUBLIC_API_BASE_URL);
+export const API_BASE =
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
+  "https://belajar-indonesian-app.onrender.com";
 
 /** Same keys as web `client` (useGameProgress / useLearner) */
 export const PROGRESS_STORAGE_KEY = "belajar_progress";

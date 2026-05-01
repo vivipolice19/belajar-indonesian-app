@@ -1,3 +1,5 @@
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ChevronLeft, ChevronRight, Shuffle, Volume2 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
@@ -7,9 +9,13 @@ import { useApp } from "../context/AppContext";
 import { useJapaneseReading } from "../hooks/useJapaneseReading";
 import { useAppSpeech } from "../hooks/useAppSpeech";
 import { prefetchJapaneseReadings } from "../lib/prefetchJapaneseReadings";
+import type { RootStackParamList } from "../navigation/types";
 import { design } from "../theme/designTokens";
 
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
 export function SentencesScreen() {
+  const navigation = useNavigation<Nav>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [shuffledSentences, setShuffledSentences] = useState([...SENTENCES_DATA]);
@@ -109,8 +115,13 @@ export function SentencesScreen() {
     <View style={styles.page} testID="page-sentences">
       <View style={styles.header}>
         <Text style={styles.title}>
-          {learnerMode === "ja" ? "文章学習" : "Belajar kalimat"}
+          {learnerMode === "ja" ? "基本マスタ（固定文章）" : "Kalimat tetap (data)"}
         </Text>
+        <Pressable style={styles.aiLink} onPress={() => navigation.navigate("Sentences")} testID="link-ai-sentences">
+          <Text style={styles.aiLinkTxt}>
+            {learnerMode === "ja" ? "シチュエーション別のAI生成へ →" : "Ke AI menurut situasi →"}
+          </Text>
+        </Pressable>
         <View style={styles.badgeRow}>
           {currentSentence.category ? (
             <View style={styles.badgeOutline} testID="badge-category">
@@ -202,6 +213,8 @@ const styles = StyleSheet.create({
   page: { gap: 24 },
   header: { alignItems: "center", gap: 8 },
   title: { fontSize: 24, fontWeight: "700", color: design.foreground },
+  aiLink: { alignSelf: "stretch", marginHorizontal: 8 },
+  aiLinkTxt: { color: design.primary, fontWeight: "700", fontSize: 14, textAlign: "center" },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   badgeOutline: {
     borderWidth: 1,

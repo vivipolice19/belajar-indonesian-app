@@ -1,6 +1,5 @@
-import { BookOpen, CheckCircle2, Download, MessageSquare, RotateCcw } from "lucide-react-native";
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
-import { API_BASE } from "../constants";
+import { BookOpen, CheckCircle2, MessageSquare, RotateCcw } from "lucide-react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useApp } from "../context/AppContext";
 import { design } from "../theme/designTokens";
 
@@ -100,17 +99,6 @@ export function ProgressScreen() {
           </Text>
         </View>
       </View>
-
-      <Pressable
-        style={styles.outlineBtn}
-        onPress={() => Linking.openURL(`${API_BASE.replace(/\/$/, "")}/api/download/project`)}
-        testID="button-download-project"
-      >
-        <Download size={18} color={design.foreground} />
-        <Text style={styles.outlineBtnTxt}>
-          {learnerMode === "ja" ? "プロジェクトをZIPでダウンロード" : "Unduh proyek (ZIP)"}
-        </Text>
-      </Pressable>
 
       <Pressable style={styles.outlineBtn} onPress={handleResetProgress} testID="button-reset-progress">
         <RotateCcw size={18} color={design.foreground} />

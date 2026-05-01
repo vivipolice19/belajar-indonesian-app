@@ -1,25 +1,34 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import path from "path";
-import archiver from "archiver";
+import { aiRateLimitMiddleware } from "./lib/aiRateLimit";
 import {
-  generateVocabulary,
-  generateSentences,
+  sentencesCacheKey,
+  sharedCacheGet,
+  sharedCacheSet,
+  sharedCacheTTL,
+  translateCacheKey,
+  vocabCacheKey,
+} from "./lib/aiSharedCache";
+import {
   advancedTranslate,
-  testGeminiConnection,
   generateJapaneseReading,
   generateJapaneseReadingsBatch,
+  generateSentences,
+  generateVocabulary,
+  testGeminiConnection,
+  type TranslationResult,
 } from "./lib/gemini";
 import {
   generateJapaneseReadingLocal,
   generateJapaneseReadingsBatchLocal,
 } from "./lib/japaneseReadingLocal";
 import { synthesizeToMp3Buffer } from "./lib/googleTranslateTts";
-import { buildAdvancedTranslateFallback } from "./lib/advancedTranslateFallback";
 import { WORDS_DATA, SENTENCES_DATA } from "../shared/types";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const aiRateLimit = aiRateLimitMiddleware();
+
   // Test Gemini connection
   app.get("/api/test/gemini", async (req, res) => {
     const result = await testGeminiConnection();
@@ -55,8 +64,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     messageId:
       "Gagal membuat konten AI. Periksa GEMINI_API_KEY di server atau coba lagi.",
   };
-  const isQuotaLike = (msg: string) =>
-    /RESOURCE_EXHAUSTED|Gemini API error:\s*429|(?:^|\D)429(?:\D|$)/i.test(msg);
+  /** メッセージ中の「429ms」などで誤爆しないよう厳しめに判定 */
+  const isGeminiQuotaError = (msg: string) => {
+    const m = String(msg);
+    if (/RESOURCE_EXHAUSTED/i.test(m)) return true;
+    if (/Gemini API error:\s*429\b/i.test(m)) return true;
+    if (/\b"code"\s*:\s*429\b/.test(m)) return true;
+    if (/quota exceeded/i.test(m)) return true;
+    return false;
+  };
   const pickRandom = <T,>(arr: T[], n: number): T[] =>
     [...arr].sort(() => Math.random() - 0.5).slice(0, Math.max(1, n));
   const fallbackWords = (
@@ -96,22 +112,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }));
   };
 
-  app.post("/api/generate/vocabulary", async (req, res) => {
+  app.post("/api/generate/vocabulary", aiRateLimit, async (req, res) => {
     try {
       const { theme, difficulty, count, learnerMode } = req.body;
-      
+
       if (!theme || !difficulty) {
         return res.status(400).json({ error: "theme and difficulty are required" });
       }
-      
+
       const mode = learnerMode === "id" ? "id" : "ja";
-      const words = await generateVocabulary(
-        theme,
-        Number(difficulty),
-        count ? Number(count) : 10,
-        mode
+      const requested = count ? Number(count) : 10;
+      const safeCount = Number.isFinite(requested)
+        ? Math.max(1, Math.min(10, Math.floor(requested)))
+        : 10;
+
+      const vKey = vocabCacheKey(mode, String(theme).trim(), Number(difficulty));
+      const memoWords = sharedCacheGet<Awaited<ReturnType<typeof generateVocabulary>>>(
+        vKey,
+        sharedCacheTTL.vocabSentences,
       );
-      
+      if (memoWords && memoWords.length >= safeCount) {
+        return res.json({ words: memoWords.slice(0, safeCount) });
+      }
+
+      const attemptCounts = Array.from(
+        new Set([safeCount, Math.min(6, safeCount), 4, 3].filter((n) => n >= 1)),
+      );
+
+      let words: Awaited<ReturnType<typeof generateVocabulary>> | null = null;
+      let lastError: unknown = null;
+      for (const n of attemptCounts) {
+        try {
+          const out = await generateVocabulary(theme, Number(difficulty), n, mode);
+          if (Array.isArray(out) && out.length > 0) {
+            words = out;
+            break;
+          }
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (!words || words.length === 0) {
+        throw lastError instanceof Error ? lastError : new Error("Empty vocabulary result");
+      }
+
+      if (words.length >= safeCount || words.length >= 8) {
+        sharedCacheSet(vKey, words);
+      }
       res.json({ words });
     } catch (error: any) {
       console.error("Vocabulary generation error:", error);
@@ -135,24 +182,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: "GEMINI_API_KEY belum disetel di server.",
         });
       }
-      res.json({ words, fallback: true, fallbackReason: "error" });
+      res.json({
+        words,
+        fallback: true,
+        fallbackReason: "error",
+        warningJa: aiFail.messageJa,
+        warningId: aiFail.messageId,
+      });
     }
   });
 
   // AI-powered sentence generation
-  app.post("/api/generate/sentences", async (req, res) => {
+  app.post("/api/generate/sentences", aiRateLimit, async (req, res) => {
     try {
       const { situation, difficulty, count, learnerMode } = req.body;
-      
+
       if (!situation || !difficulty) {
         return res.status(400).json({ error: "situation and difficulty are required" });
       }
-      
+
       const mode = learnerMode === "id" ? "id" : "ja";
       const requested = count ? Number(count) : 5;
       const safeCount = Number.isFinite(requested)
         ? Math.max(1, Math.min(10, Math.floor(requested)))
         : 5;
+
+      const sKey = sentencesCacheKey(mode, String(situation).trim(), Number(difficulty));
+      const memoSentences = sharedCacheGet<Awaited<ReturnType<typeof generateSentences>>>(
+        sKey,
+        sharedCacheTTL.vocabSentences,
+      );
+      if (memoSentences && memoSentences.length >= safeCount) {
+        return res.json({ sentences: memoSentences.slice(0, safeCount) });
+      }
+
       const attemptCounts = Array.from(
         new Set([safeCount, Math.min(6, safeCount), 4, 3].filter((n) => n >= 1)),
       );
@@ -178,7 +241,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!sentences || sentences.length === 0) {
         throw (lastError instanceof Error ? lastError : new Error("Empty sentences result"));
       }
-      
+
+      if (sentences.length >= safeCount || sentences.length >= 6) {
+        sharedCacheSet(sKey, sentences);
+      }
       res.json({ sentences });
     } catch (error: any) {
       console.error("Sentence generation error:", error);
@@ -202,12 +268,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: "GEMINI_API_KEY belum disetel di server.",
         });
       }
-      res.json({ sentences, fallback: true, fallbackReason: "error" });
+      res.json({
+        sentences,
+        fallback: true,
+        fallbackReason: "error",
+        warningJa: aiFail.messageJa,
+        warningId: aiFail.messageId,
+      });
     }
   });
 
   // Advanced translation with grammar explanations
-  app.post("/api/translate/advanced", async (req, res) => {
+  app.post("/api/translate/advanced", aiRateLimit, async (req, res) => {
     try {
       const { text, sourceLanguage } = req.body;
       
@@ -218,34 +290,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (sourceLanguage !== "japanese" && sourceLanguage !== "indonesian") {
         return res.status(400).json({ error: "sourceLanguage must be 'japanese' or 'indonesian'" });
       }
+
+      const trimmed = String(text).trim().replace(/\s+/g, " ");
+      if (trimmed.length < 1 || trimmed.length > 5000) {
+        return res.status(400).json({ error: "text length must be between 1 and 5000 characters" });
+      }
       
       const learnerMode = req.body.learnerMode === "id" ? "id" : "ja";
-      const result = await advancedTranslate(text, sourceLanguage, learnerMode);
-      
+      const tKey = translateCacheKey(
+        learnerMode,
+        sourceLanguage as "japanese" | "indonesian",
+        trimmed,
+      );
+      const memoT = sharedCacheGet<TranslationResult>(tKey, sharedCacheTTL.translate);
+      if (memoT?.indonesian && memoT?.japanese && memoT?.grammar_explanation) {
+        return res.json(memoT);
+      }
+
+      const result = await advancedTranslate(trimmed, sourceLanguage, learnerMode);
+      sharedCacheSet(tKey, result);
+
       res.json(result);
     } catch (error: any) {
       console.error("Translation error:", error);
       const errorMsg = error?.message || "Failed to translate";
-      const sourceLanguage = req.body?.sourceLanguage === "indonesian" ? "indonesian" : "japanese";
-      const learnerMode = req.body?.learnerMode === "id" ? "id" : "ja";
-      const fallback = buildAdvancedTranslateFallback(String(req.body?.text ?? ""), sourceLanguage, learnerMode);
       
-      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-        return res.json({
-          ...fallback,
-          fallback: true,
-          fallbackReason: "quota",
-          warningJa: aiLimit.messageJa,
-          warningId: aiLimit.messageId,
-        });
+      if (isGeminiQuotaError(errorMsg)) {
+        return res.status(429).json(aiLimit);
       }
       
-      res.json({
-        ...fallback,
-        fallback: true,
-        fallbackReason: "error",
-        warningJa: "翻訳サーバーが不安定なため、簡易モードで表示しています。",
-        warningId: "Server terjemahan sedang tidak stabil. Menampilkan mode sederhana.",
+      res.status(500).json({
+        messageJa: "翻訳に失敗しました。もう一度お試しください。",
+        messageId: "Terjemahan gagal. Coba lagi.",
       });
     }
   });
@@ -271,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Japanese batch reading error:", error);
       const errorMsg = error?.message || "";
-      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+      if (isGeminiQuotaError(errorMsg)) {
         return res.status(429).json(aiLimit);
       }
       if (errorMsg.includes("GEMINI_API_KEY")) {
@@ -304,7 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Japanese reading error:", error);
       const errorMsg = error?.message || "Failed to generate japanese reading";
-      if (errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+      if (isGeminiQuotaError(errorMsg)) {
         return res.status(429).json(aiLimit);
       }
       if (errorMsg.includes("GEMINI_API_KEY")) {
@@ -318,60 +394,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         messageId: "Gagal membuat bacaan hiragana. Coba lagi.",
       });
     }
-  });
-
-  // Download project as ZIP
-  app.get("/api/download/project", (req, res) => {
-    const projectRoot = path.resolve(process.cwd());
-    const zipName = "belajar-indonesian-app.zip";
-
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
-
-    const archive = archiver("zip", { zlib: { level: 9 } });
-    archive.on("error", (err) => {
-      console.error("Archive error:", err);
-      res.status(500).end();
-    });
-    archive.pipe(res);
-
-    const include = [
-      "client",
-      "server",
-      "shared",
-      "package.json",
-      "package-lock.json",
-      "tsconfig.json",
-      "tailwind.config.ts",
-      "vite.config.ts",
-      "postcss.config.js",
-      "components.json",
-      "drizzle.config.ts",
-      "replit.md",
-    ];
-
-    const excludeDirs = new Set(["node_modules", ".git", "dist", ".local", ".cache", ".upm", ".agents"]);
-
-    for (const item of include) {
-      const fullPath = path.join(projectRoot, item);
-      try {
-        const fs = require("fs");
-        const stat = fs.statSync(fullPath);
-        if (stat.isDirectory()) {
-          archive.glob("**/*", {
-            cwd: fullPath,
-            dot: true,
-            ignore: [...excludeDirs].map((d) => `**/${d}/**`),
-          }, { prefix: item });
-        } else {
-          archive.file(fullPath, { name: item });
-        }
-      } catch {
-        // File/dir not found, skip
-      }
-    }
-
-    archive.finalize();
   });
 
   const httpServer = createServer(app);

@@ -16,8 +16,7 @@ import { JapaneseLearnerReading } from "../components/JapaneseLearnerReading";
 import { useApp } from "../context/AppContext";
 import { useJapaneseReading } from "../hooks/useJapaneseReading";
 import { useAppSpeech } from "../hooks/useAppSpeech";
-import { advancedTranslateLocal } from "../lib/advancedTranslateLocal";
-import { apiRequest } from "../lib/apiRequest";
+import { apiErrorMessage, apiRequest } from "../lib/apiRequest";
 import type { RootStackParamList } from "../navigation/types";
 import type { TranslationResult } from "../types";
 import { design } from "../theme/designTokens";
@@ -40,132 +39,78 @@ export function AdvancedTranslateScreen() {
   const [result, setResult] = useState<TranslationResult | null>(null);
   const [speechRate, setSpeechRate] = useState<Rate>("0.95");
   const [pending, setPending] = useState(false);
-  const [translateHint, setTranslateHint] = useState("");
 
   const { speak, cancel, speakByPhrases, isSupported: isSpeechSupported } = useAppSpeech();
   const numericRate = useMemo(() => Number(speechRate), [speechRate]);
-  const t = learnerMode === "ja"
-    ? {
+
+  const labels = useMemo(() => {
+    if (learnerMode === "ja") {
+      return {
         back: "メニューへ戻る",
         title: "AI高度翻訳",
         subtitle: "文法解説・用例・発音ガイド付きの高度な翻訳",
-        langJa: "日本語",
-        langId: "インドネシア語",
-        placeholderJa: "日本語のテキストを入力してください...",
-        placeholderId: "インドネシア語のテキストを入力してください...",
-        speed: "読み上げ速度",
-        slow: "ゆっくり",
-        normal: "ふつう",
-        fast: "はやい",
+        badgeJp: "日本語",
+        badgeId: "インドネシア語",
+        phJp: "日本語のテキストを入力してください...",
+        phId: "Masukkan teks bahasa Indonesia...",
+        rateLabel: "読み上げ速度",
+        rateSlow: "ゆっくり",
+        rateMid: "ふつう",
+        rateFast: "はやい",
         stop: "停止",
-        translate: "翻訳",
+        speechUnsupported: "お使いの端末は音声読み上げに対応していません",
+        emptyInput: "テキストを入力してください",
         translating: "翻訳中...",
-        result: "翻訳結果",
-        idLabel: "インドネシア語",
-        jpLabel: "日本語",
-      }
-    : {
-        back: "Kembali ke menu",
-        title: "Terjemahan lanjutan AI",
-        subtitle: "Terjemahan lengkap dengan tata bahasa, contoh, dan panduan pelafalan",
-        langJa: "Bahasa Jepang",
-        langId: "Bahasa Indonesia",
-        placeholderJa: "Masukkan teks bahasa Jepang...",
-        placeholderId: "Masukkan teks bahasa Indonesia...",
-        speed: "Kecepatan suara",
-        slow: "Lambat",
-        normal: "Normal",
-        fast: "Cepat",
-        stop: "Hentikan",
-        translate: "Terjemahkan",
-        translating: "Menerjemahkan...",
-        result: "Hasil terjemahan",
-        idLabel: "Bahasa Indonesia",
-        jpLabel: "Bahasa Jepang",
+        translateBtn: "翻訳",
+        resultTitle: "翻訳結果",
+        labelId: "インドネシア語",
+        labelJp: "日本語",
+        phraseChunk: "文ごと",
+        formalityPrefix: "" as string,
       };
-
-  const norm = (s: string) => s.replace(/[。、「」！？!?,.\s]/g, "").toLowerCase().trim();
-
-  const isAiResultUsable = (
-    ai: TranslationResult,
-    originalInput: string,
-    source: "japanese" | "indonesian",
-  ) => {
-    if (!ai?.indonesian?.trim() || !ai?.japanese?.trim()) return false;
-    if (source === "japanese") return norm(ai.japanese) === norm(originalInput);
-    return norm(ai.indonesian) === norm(originalInput);
-  };
-
-  const fetchAiRefinement = async (
-    text: string,
-    source: "japanese" | "indonesian",
-    mode: "ja" | "id",
-  ): Promise<TranslationResult | null> => {
-    const timeoutMs = 2800;
-    const res = (await Promise.race([
-      apiRequest(
-        "POST",
-        "/api/translate/advanced",
-        { text, sourceLanguage: source, learnerMode: mode },
-        { retries: 0, retryDelayMs: 250 },
-      ),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("ai_timeout")), timeoutMs),
-      ),
-    ])) as Response;
-
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("application/json")) return null;
-    const ai = (await res.json()) as TranslationResult;
-    return isAiResultUsable(ai, text, source) ? ai : null;
-  };
+    }
+    return {
+      back: "Kembali ke menu",
+      title: "Terjemahan AI tingkat lanjut",
+      subtitle: "Terjemahan mendalam beserta tata bahasa, contoh, dan panduan pengucapan",
+      badgeJp: "Bahasa Jepang",
+      badgeId: "Bahasa Indonesia",
+      phJp: "Masukkan teks bahasa Jepang...",
+      phId: "Masukkan teks bahasa Indonesia...",
+      rateLabel: "Kecepatan bicara",
+      rateSlow: "Pelan",
+      rateMid: "Normal",
+      rateFast: "Cepat",
+      stop: "Berhenti",
+      speechUnsupported: "Perangkat ini belum mendukung fitur suara.",
+      emptyInput: "Masukkan teks.",
+      translating: "Menerjemahkan...",
+      translateBtn: "Terjemahkan",
+      resultTitle: "Hasil terjemahan",
+      labelId: "Bahasa Indonesia",
+      labelJp: "Bahasa Jepang",
+      phraseChunk: "Per frasa",
+      formalityPrefix: "Keformalan",
+    };
+  }, [learnerMode]);
 
   const handleTranslate = async () => {
     if (!inputText.trim()) {
-      Alert.alert("", learnerMode === "ja" ? "テキストを入力してください" : "Masukkan teks terlebih dahulu.");
+      Alert.alert("", labels.emptyInput);
       return;
     }
     setPending(true);
-    setTranslateHint("");
     try {
-      const local = advancedTranslateLocal(inputText, sourceLanguage, learnerMode);
-      setResult(local);
-      setTranslateHint(
-        learnerMode === "ja"
-          ? "即時表示（ローカル）"
-          : "Tampil cepat (lokal)",
+      const res = await apiRequest(
+        "POST",
+        "/api/translate/advanced",
+        { text: inputText, sourceLanguage, learnerMode },
+        { retries: 2, retryDelayMs: 900 },
       );
-
-      try {
-        const ai = await fetchAiRefinement(inputText, sourceLanguage, learnerMode);
-        if (ai) {
-          setResult(ai);
-          setTranslateHint(
-            learnerMode === "ja"
-              ? "AIで精度更新済み"
-              : "Disempurnakan AI",
-          );
-        } else {
-          setTranslateHint(
-            learnerMode === "ja"
-              ? "ローカル結果を表示中（AI更新なし）"
-              : "Menampilkan hasil lokal (tanpa pembaruan AI)",
-          );
-        }
-      } catch {
-        setTranslateHint(
-          learnerMode === "ja"
-            ? "ローカル結果を表示中（AI接続失敗）"
-            : "Menampilkan hasil lokal (AI gagal tersambung)",
-        );
-      }
-    } catch {
-      Alert.alert(
-        learnerMode === "ja" ? "エラー" : "Kesalahan",
-        learnerMode === "ja"
-          ? "ローカル翻訳に失敗しました。入力を変えて再試行してください。"
-          : "Terjemahan lokal gagal. Coba ubah teks lalu ulangi.",
-      );
+      const data = (await res.json()) as TranslationResult;
+      setResult(data);
+    } catch (e) {
+      Alert.alert(learnerMode === "ja" ? "エラー" : "Kesalahan", apiErrorMessage(e, learnerMode));
     } finally {
       setPending(false);
     }
@@ -180,10 +125,7 @@ export function AdvancedTranslateScreen() {
 
   const pronounceText = (text: string, lang: "id-ID" | "ja-JP") => {
     if (!isSpeechSupported) {
-      Alert.alert(
-        "",
-        learnerMode === "ja" ? "音声機能を利用できません" : "Fitur suara tidak tersedia.",
-      );
+      Alert.alert("", labels.speechUnsupported);
       return;
     }
     speak(text, lang, numericRate);
@@ -191,40 +133,43 @@ export function AdvancedTranslateScreen() {
 
   const pronounceByPhrases = (text: string, lang: "id-ID" | "ja-JP") => {
     if (!isSpeechSupported) {
-      Alert.alert(
-        "",
-        learnerMode === "ja" ? "音声機能を利用できません" : "Fitur suara tidak tersedia.",
-      );
+      Alert.alert("", labels.speechUnsupported);
       return;
     }
     speakByPhrases(text, { lang, rate: numericRate });
   };
 
+  const placeholder =
+    sourceLanguage === "japanese" ? labels.phJp : labels.phId;
+
   return (
-    <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={styles.scroll}
+      keyboardShouldPersistTaps="handled"
+    >
       <Pressable onPress={() => navigation.navigate("Home")} style={styles.backRow} testID="button-back">
         <ArrowLeft size={18} color={design.foreground} />
-        <Text style={styles.backTxt}>{t.back}</Text>
+        <Text style={styles.backTxt}>{labels.back}</Text>
       </Pressable>
 
       <View style={styles.card}>
         <View style={styles.titleRow}>
           <Languages size={22} color={design.foreground} />
-          <Text style={styles.title}>{t.title}</Text>
+          <Text style={styles.title}>{labels.title}</Text>
         </View>
-        <Text style={styles.subCenter}>{t.subtitle}</Text>
-        {translateHint ? <Text style={styles.hintBar}>{translateHint}</Text> : null}
+        <Text style={styles.subCenter}>{labels.subtitle}</Text>
 
         <View style={styles.swapRow}>
           <View style={[styles.badge, sourceLanguage === "japanese" && styles.badgeOn]}>
-            <Text style={[styles.badgeTxt, sourceLanguage === "japanese" && styles.badgeTxtOn]}>{t.langJa}</Text>
+            <Text style={[styles.badgeTxt, sourceLanguage === "japanese" && styles.badgeTxtOn]}>{labels.badgeJp}</Text>
           </View>
           <Pressable onPress={handleSwapLanguage} style={styles.swapBtn} testID="button-swap">
             <ArrowLeftRight size={18} color={design.foreground} />
           </Pressable>
           <View style={[styles.badge, sourceLanguage === "indonesian" && styles.badgeOn]}>
             <Text style={[styles.badgeTxt, sourceLanguage === "indonesian" && styles.badgeTxtOn]}>
-              {t.langId}
+              {labels.badgeId}
             </Text>
           </View>
         </View>
@@ -234,38 +179,34 @@ export function AdvancedTranslateScreen() {
           onChangeText={setInputText}
           style={styles.textarea}
           multiline
-          placeholder={
-            sourceLanguage === "japanese"
-              ? t.placeholderJa
-              : t.placeholderId
-          }
+          placeholder={placeholder}
           testID="input-translate"
         />
 
         <View style={styles.rateRow}>
-          <Text style={styles.rateLabel}>{t.speed}</Text>
+          <Text style={styles.rateLabel}>{labels.rateLabel}</Text>
           <Pressable
             style={[styles.rateChip, speechRate === "0.8" && styles.rateChipOn]}
             onPress={() => setSpeechRate("0.8")}
           >
-            <Text style={styles.rateChipTxt}>{t.slow}</Text>
+            <Text style={styles.rateChipTxt}>{labels.rateSlow}</Text>
           </Pressable>
           <Pressable
             style={[styles.rateChip, speechRate === "0.95" && styles.rateChipOn]}
             onPress={() => setSpeechRate("0.95")}
             testID="select-speech-rate"
           >
-            <Text style={styles.rateChipTxt}>{t.normal}</Text>
+            <Text style={styles.rateChipTxt}>{labels.rateMid}</Text>
           </Pressable>
           <Pressable
             style={[styles.rateChip, speechRate === "1.1" && styles.rateChipOn]}
             onPress={() => setSpeechRate("1.1")}
           >
-            <Text style={styles.rateChipTxt}>{t.fast}</Text>
+            <Text style={styles.rateChipTxt}>{labels.rateFast}</Text>
           </Pressable>
           <Pressable style={styles.stopBtn} onPress={cancel} testID="button-speech-stop">
             <Square size={16} color={design.foreground} />
-            <Text style={styles.stopTxt}>{t.stop}</Text>
+            <Text style={styles.stopTxt}>{labels.stop}</Text>
           </Pressable>
         </View>
 
@@ -278,12 +219,12 @@ export function AdvancedTranslateScreen() {
           {pending ? (
             <View style={styles.rowCenter}>
               <ActivityIndicator color="#fff" />
-              <Text style={styles.translateBtnTxt}>{t.translating}</Text>
+              <Text style={styles.translateBtnTxt}>{labels.translating}</Text>
             </View>
           ) : (
             <View style={styles.rowCenter}>
               <Languages size={18} color="#fff" />
-              <Text style={styles.translateBtnTxt}>{t.translate}</Text>
+              <Text style={styles.translateBtnTxt}>{labels.translateBtn}</Text>
             </View>
           )}
         </Pressable>
@@ -292,10 +233,10 @@ export function AdvancedTranslateScreen() {
       {result ? (
         <View style={styles.gapBlock}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>{t.result}</Text>
+            <Text style={styles.sectionTitle}>{labels.resultTitle}</Text>
             <View style={styles.block}>
               <View style={styles.labelRow}>
-                <Text style={styles.smallLabel}>{t.idLabel}</Text>
+                <Text style={styles.smallLabel}>{labels.labelId}</Text>
                 <View style={styles.miniActions}>
                   <Pressable onPress={() => pronounceText(result.indonesian, "id-ID")} testID="button-pronounce-indonesian">
                     <Volume2 size={18} color={design.primary} />
@@ -305,7 +246,7 @@ export function AdvancedTranslateScreen() {
                     onPress={() => pronounceByPhrases(result.indonesian, "id-ID")}
                     testID="button-pronounce-indonesian-phrases"
                   >
-                    <Text style={styles.miniPhraseTxt}>文ごと</Text>
+                    <Text style={styles.miniPhraseTxt}>{labels.phraseChunk}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -315,7 +256,7 @@ export function AdvancedTranslateScreen() {
             </View>
             <View style={styles.block}>
               <View style={styles.labelRow}>
-                <Text style={styles.smallLabel}>{t.jpLabel}</Text>
+                <Text style={styles.smallLabel}>{labels.labelJp}</Text>
                 <View style={styles.miniActions}>
                   <Pressable onPress={() => pronounceText(result.japanese, "ja-JP")} testID="button-pronounce-japanese">
                     <Volume2 size={18} color={design.primary} />
@@ -325,7 +266,7 @@ export function AdvancedTranslateScreen() {
                     onPress={() => pronounceByPhrases(result.japanese, "ja-JP")}
                     testID="button-pronounce-japanese-phrases"
                   >
-                    <Text style={styles.miniPhraseTxt}>文ごと</Text>
+                    <Text style={styles.miniPhraseTxt}>{labels.phraseChunk}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -334,7 +275,11 @@ export function AdvancedTranslateScreen() {
               </View>
             </View>
             <View style={styles.formalityBadge} testID="badge-formality">
-              <Text style={styles.formalityTxt}>{result.formality_level}</Text>
+              <Text style={styles.formalityTxt}>
+                {labels.formalityPrefix
+                  ? `${labels.formalityPrefix}: ${result.formality_level}`
+                  : result.formality_level}
+              </Text>
             </View>
           </View>
 
@@ -375,7 +320,7 @@ export function AdvancedTranslateScreen() {
                         onPress={() => pronounceByPhrases(example.indonesian, "id-ID")}
                         testID={`button-pronounce-example-phrases-${index}`}
                       >
-                        <Text style={styles.miniPhraseTxt}>文ごと</Text>
+                        <Text style={styles.miniPhraseTxt}>{labels.phraseChunk}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -401,7 +346,8 @@ export function AdvancedTranslateScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32, gap: 16 },
+  scrollView: { flex: 1 },
+  scroll: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 16 },
   backRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
   backTxt: { fontSize: 15, fontWeight: "600", color: design.foreground },
   card: {
@@ -415,15 +361,6 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   title: { fontSize: 22, fontWeight: "800", color: design.foreground },
   subCenter: { fontSize: 14, color: design.mutedForeground, textAlign: "center", lineHeight: 20 },
-  hintBar: {
-    alignSelf: "center",
-    fontSize: 12,
-    color: design.mutedForeground,
-    backgroundColor: "hsl(220, 15%, 92%)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
   swapRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
   badge: {
     paddingHorizontal: 12,

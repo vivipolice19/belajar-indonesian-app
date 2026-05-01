@@ -1,16 +1,12 @@
 import { StatusBar } from "expo-status-bar";
 import { ScrollView, StyleSheet, View } from "react-native";
-import type { RootStackParamList } from "../navigation/types";
 import { design } from "../theme/designTokens";
-import { AppBottomNav } from "./AppBottomNav";
 import { AppHeader } from "./AppHeader";
 
 export function ScreenScaffold({
-  routeName,
   scroll = true,
   children,
 }: {
-  routeName: keyof RootStackParamList;
   scroll?: boolean;
   children: React.ReactNode;
 }) {
@@ -29,7 +25,6 @@ export function ScreenScaffold({
       ) : (
         <View style={styles.body}>{children}</View>
       )}
-      <AppBottomNav current={routeName} />
     </View>
   );
 }
@@ -37,5 +32,5 @@ export function ScreenScaffold({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: design.background },
   body: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 96, flexGrow: 1 },
+  scrollContent: { padding: 16, paddingBottom: 28, flexGrow: 1 },
 });

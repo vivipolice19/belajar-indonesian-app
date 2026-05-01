@@ -16,7 +16,7 @@ import { JapaneseLearnerReading } from "../components/JapaneseLearnerReading";
 import { useApp } from "../context/AppContext";
 import { useJapaneseReading } from "../hooks/useJapaneseReading";
 import { useAppSpeech } from "../hooks/useAppSpeech";
-import { generateLocalAiWords } from "../lib/aiLocalGenerator";
+import { apiErrorMessage, apiRequest } from "../lib/apiRequest";
 import { difficultyLabel, themeDisplay } from "../lib/bilingualLabels";
 import type { RootStackParamList } from "../navigation/types";
 import { design } from "../theme/designTokens";
@@ -61,23 +61,59 @@ export function AICardsScreen() {
   const handleGenerate = async () => {
     setPending(true);
     try {
-      const list = generateLocalAiWords(theme, difficulty, learnerMode, 10);
+      const res = await apiRequest(
+        "POST",
+        "/api/generate/vocabulary",
+        { theme, difficulty, count: 10, learnerMode },
+        { retries: 3, retryDelayMs: 1100 },
+      );
+      const data = (await res.json()) as {
+        words?: AIWord[];
+        fallback?: boolean;
+        warningJa?: string;
+        warningId?: string;
+      };
+      const list = Array.isArray(data.words) ? data.words : [];
+      if (list.length === 0) {
+        Alert.alert(
+          learnerMode === "ja" ? "生成できません" : "Gagal membuat",
+          learnerMode === "ja"
+            ? "単語が0件でした。ネット接続・APIのURL（EXPO_PUBLIC_API_BASE_URL）・サーバーのGEMINI_API_KEYを確認してください。"
+            : "Tidak ada kosakata. Periksa jaringan, URL API, dan GEMINI_API_KEY di server.",
+        );
+        setShowSettings(true);
+        return;
+      }
       setWords(list);
       setCurrentIndex(0);
       setIsFlipped(false);
       setShowSettings(false);
-      Alert.alert(
-        "",
+      const isFallback = Boolean(data?.fallback);
+      const serverWarn =
         learnerMode === "ja"
-          ? `${list.length}個の新しい単語を生成しました！`
-          : `${list.length} kosakata baru dibuat.`,
-      );
-    } catch {
+          ? (typeof data.warningJa === "string" ? data.warningJa.trim() : "")
+          : (typeof data.warningId === "string" ? data.warningId.trim() : "");
+      if (isFallback) {
+        const base =
+          learnerMode === "ja"
+            ? `学習データから${list.length}語を表示しています（AI生成ではありません）。`
+            : `Menampilkan ${list.length} kosakata dari data latihan (bukan AI).`;
+        Alert.alert(
+          learnerMode === "ja" ? "AI生成に失敗しました" : "Gagal memakai AI",
+          [serverWarn || null, base].filter(Boolean).join("\n\n"),
+        );
+      } else {
+        Alert.alert(
+          "",
+          learnerMode === "ja"
+            ? `${list.length}個の新しい単語を生成しました！`
+            : `${list.length} kosakata baru dibuat.`,
+        );
+      }
+    } catch (e) {
       Alert.alert(
         learnerMode === "ja" ? "エラー" : "Kesalahan",
-        learnerMode === "ja"
-          ? "単語生成に失敗しました。"
-          : "Gagal membuat kosakata.",
+        apiErrorMessage(e, learnerMode),
       );
     } finally {
       setPending(false);
@@ -113,13 +149,25 @@ export function AICardsScreen() {
 
         <View style={styles.setupCard}>
           <Text style={styles.setupTitle}>
-            {learnerMode === "ja" ? "AI無限単語カード" : "Kartu kosakata AI (tanpa batas)"}
+            {learnerMode === "ja" ? "単語（AI生成）" : "Kosakata (AI)"}
           </Text>
           <Text style={styles.setupSub}>
             {learnerMode === "ja"
-              ? "AIが無限に新しい単語を生成します"
-              : "AI membuat kosakata baru tanpa henti untuk latihan bahasa Jepang."}
+              ? "テーマと難易度を選んで、新しい語を生成します。"
+              : "Pilih tema & tingkat kesulitan, lalu buat kosakata baru."}
           </Text>
+
+          <Pressable
+            style={styles.basicLink}
+            onPress={() => navigation.navigate("BasicWordCards")}
+            testID="link-basic-words"
+          >
+            <Text style={styles.basicLinkTxt}>
+              {learnerMode === "ja"
+                ? "基本150語だけをフラッシュカードで練習 →"
+                : "Latihan 150 kosakata dasar (kartu) →"}
+            </Text>
+          </Pressable>
 
           <Text style={styles.fieldLabel}>{learnerMode === "ja" ? "テーマ" : "Tema"}</Text>
           <Pressable style={styles.selectTrigger} onPress={() => setPicker("theme")} testID="select-theme">
@@ -191,7 +239,7 @@ export function AICardsScreen() {
   return (
     <View style={styles.page} testID="page-ai-cards">
       <View style={styles.header}>
-        <Text style={styles.title}>{learnerMode === "ja" ? "AI単語カード" : "Kartu kosakata AI"}</Text>
+        <Text style={styles.title}>{learnerMode === "ja" ? "単語" : "Kosakata"}</Text>
         <View style={styles.badgeRow}>
           <View style={styles.badgeOutline} testID="badge-category">
             <Text style={styles.badgeOutlineTxt}>{currentWord.category}</Text>
@@ -204,8 +252,8 @@ export function AICardsScreen() {
         </View>
         <Text style={styles.meta}>
           {learnerMode === "ja"
-            ? `${currentIndex + 1} / ${words.length} （次の単語は自動生成）`
-            : `${currentIndex + 1} / ${words.length} • set berikutnya otomatis`}
+            ? `${currentIndex + 1} / ${words.length}（⚙でテーマ変更・再生成）`
+            : `${currentIndex + 1} / ${words.length} • ⚙ ubah tema / buat lagi`}
         </Text>
       </View>
 
@@ -339,6 +387,16 @@ const styles = StyleSheet.create({
   },
   setupTitle: { fontSize: 22, fontWeight: "700", color: design.foreground, textAlign: "center" },
   setupSub: { fontSize: 14, color: design.mutedForeground, textAlign: "center", lineHeight: 20 },
+  basicLink: {
+    alignSelf: "stretch",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: design.primary,
+    backgroundColor: "hsla(12, 100%, 60%, 0.1)",
+  },
+  basicLinkTxt: { color: design.primary, fontWeight: "700", fontSize: 14, textAlign: "center" },
   fieldLabel: { fontSize: 14, fontWeight: "600", color: design.foreground },
   selectTrigger: {
     borderWidth: 1,
