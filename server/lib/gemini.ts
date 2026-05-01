@@ -502,27 +502,45 @@ The "items" array MUST have exactly ${unique.length} objects in the SAME ORDER a
   return out;
 }
 
-export async function testGeminiConnection(): Promise<{ success: boolean; error?: string }> {
+export async function testGeminiConnection(): Promise<{
+  success: boolean;
+  model?: string;
+  error?: string;
+}> {
   try {
     const apiKey = getApiKey();
-    const url = `${GEMINI_API_URL}/${MODEL_FALLBACKS[0]}:generateContent?key=${apiKey}`;
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: "Hello" }] }],
-        generationConfig: { maxOutputTokens: 10 },
-      }),
+    const body = JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: "Hello" }] }],
+      generationConfig: { maxOutputTokens: 16 },
     });
+    let lastErr = "";
+    for (const model of MODEL_FALLBACKS) {
+      const url = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      return { success: false, error: errorText };
+      if (res.ok) {
+        try {
+          const data = await res.json();
+          if (data?.candidates?.length) {
+            return { success: true, model };
+          }
+        } catch {
+          /* continue */
+        }
+        lastErr = `${model}: empty candidates`;
+        continue;
+      }
+
+      lastErr = await res.text().catch(() => `${model}: HTTP ${res.status}`);
     }
 
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error?.message || "Unknown error" };
+    return { success: false, error: lastErr || "Gemini request failed for all fallback models" };
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    return { success: false, error: err.message || "Unknown error" };
   }
 }
